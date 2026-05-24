@@ -17,6 +17,10 @@ const schema = z.object({
   name: z.string().min(2, 'Nome muito curto'),
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'As senhas não coincidem',
+  path: ['confirmPassword'],
 })
 
 type FormData = z.infer<typeof schema>
@@ -74,6 +78,11 @@ export default function SignupPage() {
             <Label htmlFor="password">Senha</Label>
             <Input id="password" type="password" placeholder="Mínimo 6 caracteres" {...register('password')} />
             {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="confirmPassword">Confirmar senha</Label>
+            <Input id="confirmPassword" type="password" placeholder="Repita a senha" {...register('confirmPassword')} />
+            {errors.confirmPassword && <p className="text-sm text-red-500">{errors.confirmPassword.message}</p>}
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Criando conta...' : 'Criar conta grátis'}
