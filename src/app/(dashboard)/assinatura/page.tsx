@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PLANS } from '@/lib/plans'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Crown, Check, Zap, Clock } from 'lucide-react'
+import { Crown, Check, Zap, Clock, Mail } from 'lucide-react'
 
 type Profile = {
   plan: 'basic' | 'premium'
@@ -37,6 +37,10 @@ export default function AssinaturaPage() {
   const searchParams = useSearchParams()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(false)
+  const [pendingPlan, setPendingPlan] = useState<'basic' | 'premium' | null>(null)
+  const [userEmail, setUserEmail] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     if (searchParams.get('success') === '1') toast.success('Assinatura confirmada! Bem-vinda ao Premium 🎉')
@@ -47,6 +51,7 @@ export default function AssinaturaPage() {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
+      setUserEmail(user.email ?? '')
       supabase
         .from('users')
         .select('plan, stripe_subscription_id, created_at')
@@ -56,7 +61,26 @@ export default function AssinaturaPage() {
     })
   }, [])
 
-  async function handleCheckout(plan: 'basic' | 'premium') {
+  // Listen for email confirmation and auto-proceed to checkout
+  useEffect(() => {
+    if (!pendingPlan) return
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'USER_UPDATED' && session?.user.email_confirmed_at) {
+        subscription.unsubscribe()
+        setPendingPlan(null)
+        startCheckout(pendingPlan)
+      }
+    })
+    return () => subscription.unsubscribe()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPlan])
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
+  }, [])
+
+  async function startCheckout(plan: 'basic' | 'premium') {
     setLoading(true)
     try {
       const res = await fetch('/api/stripe/checkout', {
@@ -71,6 +95,36 @@ export default function AssinaturaPage() {
       toast.error(err instanceof Error ? err.message : 'Erro ao iniciar checkout')
       setLoading(false)
     }
+  }
+
+  async function handleCheckout(plan: 'basic' | 'premium') {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    if (!user.email_confirmed_at) {
+      setPendingPlan(plan)
+      return
+    }
+
+    await startCheckout(plan)
+  }
+
+  async function handleResend() {
+    const supabase = createClient()
+    const { error } = await supabase.auth.resend({ type: 'signup', email: userEmail })
+    if (error) {
+      toast.error('Erro ao reenviar e-mail')
+      return
+    }
+    toast.success('E-mail de confirmação reenviado!')
+    setResendCooldown(60)
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((s) => {
+        if (s <= 1) { clearInterval(cooldownRef.current!); return 0 }
+        return s - 1
+      })
+    }, 1000)
   }
 
   async function handlePortal() {
@@ -91,6 +145,42 @@ export default function AssinaturaPage() {
   const isTrialing = profile && !profile.stripe_subscription_id
   const daysLeft = profile ? trialDaysLeft(profile.created_at) : 0
   const trialStillActive = isTrialing && daysLeft > 0
+
+  if (pendingPlan) {
+    return (
+      <div className="max-w-md mx-auto mt-16">
+        <Card className="p-8 flex flex-col items-center text-center gap-5">
+          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center">
+            <Mail className="h-7 w-7 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Confirme seu e-mail</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              Enviamos um link de confirmação para <strong>{userEmail}</strong>.
+              Clique no link e você será redirecionada automaticamente para o checkout.
+            </p>
+          </div>
+          <div className="w-full flex flex-col gap-2">
+            <Button
+              onClick={handleResend}
+              disabled={resendCooldown > 0}
+              variant="outline"
+              className="w-full"
+            >
+              {resendCooldown > 0 ? `Reenviar em ${resendCooldown}s` : 'Reenviar e-mail'}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => setPendingPlan(null)}
+            >
+              Voltar
+            </Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
