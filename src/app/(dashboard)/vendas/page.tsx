@@ -62,7 +62,7 @@ const orderSchema = z.object({
   delivery_time: z.string().optional(),
   delivery_address: z.string().min(1, 'Endereço obrigatório'),
   total_amount: z.number().min(0.01, 'Valor obrigatório'),
-  cost: z.number().min(0).default(0),
+  cost: z.number().min(0),
   card_message: z.string().optional(),
   notes: z.string().optional(),
 })
@@ -567,7 +567,7 @@ export default function VendasPage() {
               <div className="flex gap-2">
                 <Select
                   value={selectedCustomerId || 'none'}
-                  onValueChange={(v) => setSelectedCustomerId(v === 'none' ? '' : v)}
+                  onValueChange={(v) => setSelectedCustomerId(!v || v === 'none' ? '' : v)}
                 >
                   <SelectTrigger className="flex-1">
                     <span className="truncate text-sm">
@@ -611,7 +611,7 @@ export default function VendasPage() {
                       setSelectedBasketId('')
                       setValue('basket_name', '')
                     } else {
-                      handleBasketSelect(v)
+                      v && handleBasketSelect(v)
                     }
                   }}
                 >
