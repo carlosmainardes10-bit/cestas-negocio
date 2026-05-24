@@ -6,6 +6,7 @@ import {
   MessageSquareText, TrendingUp, Users, ChevronRight,
 } from 'lucide-react'
 import { verifySession } from '@/lib/supabase/dal'
+import { Logo } from '@/components/Logo'
 
 export default async function LandingPage() {
   const user = await verifySession()
@@ -17,7 +18,7 @@ export default async function LandingPage() {
       {/* ── Nav ─────────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 bg-white border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="font-black text-xl tracking-tight">🧺 Empresa de Cestas</span>
+          <Logo height={34} />
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
               Entrar
@@ -451,7 +452,7 @@ export default async function LandingPage() {
       <footer className="bg-[#0a0a0a] text-gray-500 py-10 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <p className="text-white font-black text-lg mb-0.5">🧺 Empresa de Cestas</p>
+            <Logo height={30} className="brightness-0 invert mb-0.5" />
             <p className="text-xs">O sistema de gestão para empreendedoras de cestas.</p>
           </div>
           <div className="flex items-center gap-6 text-sm">

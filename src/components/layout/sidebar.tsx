@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { BasketIcon } from '@/components/Logo'
 import {
   Calculator,
   ShoppingBasket,
@@ -53,9 +54,12 @@ export function Sidebar() {
 
   return (
     <aside className="w-56 bg-white border-r flex flex-col py-6 px-3 shrink-0">
-      <div className="px-3 mb-8">
-        <h1 className="text-lg font-bold text-amber-900">🧺 Cestas</h1>
-        <p className="text-xs text-muted-foreground">Negócio Lucrativo</p>
+      <div className="px-3 mb-8 flex items-center gap-2">
+        <BasketIcon size={28} color="#92400e" />
+        <div>
+          <p className="text-xs font-bold text-amber-900 leading-none">EMPRESA DE</p>
+          <p className="text-base font-black text-amber-900 leading-none tracking-tight">CESTAS</p>
+        </div>
       </div>
 
       <nav className="flex-1 space-y-1">
