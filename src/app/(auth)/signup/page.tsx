@@ -52,8 +52,7 @@ export default function SignupPage() {
     // fire-and-forget — never block signup on email failure
     fetch('/api/auth/welcome', { method: 'POST' }).catch(() => {})
 
-    router.push('/calculadora')
-    router.refresh()
+    router.push('/onboarding')
   }
 
   return (
