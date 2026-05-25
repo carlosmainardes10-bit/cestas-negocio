@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { Badge } from '@/components/ui/badge'
-import { Crown, Clock, UserX } from 'lucide-react'
+import { Crown, Clock, UserX, TrendingUp } from 'lucide-react'
+import { PLANS } from '@/lib/plans'
 
 type UserRow = {
   id: string
@@ -64,6 +65,10 @@ export default async function AdminPage() {
   const trial = rows.filter(u => !u.stripe_subscription_id && (Date.now() - new Date(u.created_at).getTime()) < 7 * 86_400_000).length
   const inactive = total - active - trial
 
+  const basicCount = rows.filter(u => u.stripe_subscription_id && u.plan === 'basic').length
+  const premiumCount = rows.filter(u => u.stripe_subscription_id && u.plan === 'premium').length
+  const mrr = basicCount * PLANS.basic.price + premiumCount * PLANS.premium.price
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,7 +77,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { label: 'Total', value: total, color: 'text-gray-900' },
           { label: 'Assinantes', value: active, color: 'text-amber-700' },
@@ -84,6 +89,18 @@ export default async function AdminPage() {
             <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
           </div>
         ))}
+        <div className="rounded-xl border bg-white p-4 sm:col-span-1 col-span-2">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingUp className="h-3.5 w-3.5 text-green-600" />
+            <p className="text-xs text-muted-foreground">Receita mensal (MRR)</p>
+          </div>
+          <p className="text-2xl font-bold text-green-600">
+            {(mrr / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {basicCount}× Básico · {premiumCount}× Premium
+          </p>
+        </div>
       </div>
 
       {/* Table */}
