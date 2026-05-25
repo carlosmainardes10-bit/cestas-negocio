@@ -13,6 +13,7 @@ type UserRow = {
   whatsapp: string | null
   business_name: string | null
   created_at: string
+  last_seen_at?: string | null
 }
 
 function planBadge(user: UserRow) {
@@ -41,12 +42,22 @@ export default async function AdminPage() {
   }
 
   const admin = createAdminClient()
-  const { data: users } = await admin
-    .from('users')
-    .select('id, name, email, plan, stripe_subscription_id, whatsapp, business_name, created_at')
-    .order('created_at', { ascending: false })
+  const [{ data: users }, { data: authData }] = await Promise.all([
+    admin
+      .from('users')
+      .select('id, name, email, plan, stripe_subscription_id, whatsapp, business_name, created_at')
+      .order('created_at', { ascending: false }),
+    admin.auth.admin.listUsers({ perPage: 1000 }),
+  ])
 
-  const rows = (users ?? []) as UserRow[]
+  const lastSeenMap = new Map(
+    (authData?.users ?? []).map(u => [u.id, u.last_sign_in_at ?? null])
+  )
+
+  const rows = ((users ?? []) as UserRow[]).map(u => ({
+    ...u,
+    last_seen_at: lastSeenMap.get(u.id) ?? null,
+  }))
 
   const total = rows.length
   const active = rows.filter(u => u.stripe_subscription_id).length
@@ -87,6 +98,7 @@ export default async function AdminPage() {
                 <th className="px-4 py-3 font-medium text-muted-foreground">WhatsApp</th>
                 <th className="px-4 py-3 font-medium text-muted-foreground">Plano</th>
                 <th className="px-4 py-3 font-medium text-muted-foreground">Cadastro</th>
+                <th className="px-4 py-3 font-medium text-muted-foreground">Último acesso</th>
               </tr>
             </thead>
             <tbody>
@@ -98,6 +110,7 @@ export default async function AdminPage() {
                   <td className="px-4 py-3 text-muted-foreground">{u.whatsapp ?? '—'}</td>
                   <td className="px-4 py-3">{planBadge(u)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{fmt(u.created_at)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.last_seen_at ? fmt(u.last_seen_at) : '—'}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
