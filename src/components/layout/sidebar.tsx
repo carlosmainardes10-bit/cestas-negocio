@@ -23,6 +23,8 @@ import {
   Scale,
   UserCircle,
   ShieldCheck,
+  Menu,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -50,6 +52,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -57,6 +60,9 @@ export function Sidebar() {
       if (user?.email === ADMIN_EMAIL) setIsAdmin(true)
     })
   }, [])
+
+  // Close drawer on navigation
+  useEffect(() => { setOpen(false) }, [pathname])
 
   async function handleLogout() {
     const supabase = createClient()
@@ -66,17 +72,9 @@ export function Sidebar() {
     router.refresh()
   }
 
-  return (
-    <aside className="w-56 bg-white border-r flex flex-col py-6 px-3 shrink-0">
-      <div className="px-3 mb-8 flex items-center gap-2">
-        <BasketIcon size={28} color="#92400e" />
-        <div>
-          <p className="text-xs font-bold text-amber-900 leading-none">EMPRESA DE</p>
-          <p className="text-base font-black text-amber-900 leading-none tracking-tight">CESTAS</p>
-        </div>
-      </div>
-
-      <nav className="flex-1 space-y-1">
+  const navLinks = (
+    <>
+      <nav className="flex-1 space-y-1 overflow-y-auto">
         {nav.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
@@ -117,6 +115,56 @@ export function Sidebar() {
         <LogOut className="h-4 w-4" />
         Sair
       </Button>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* ── Mobile hamburger button ── */}
+      <button
+        className="md:hidden fixed top-3 left-3 z-50 bg-white border rounded-lg p-2 shadow-sm"
+        onClick={() => setOpen(true)}
+        aria-label="Abrir menu"
+      >
+        <Menu className="h-5 w-5 text-gray-700" />
+      </button>
+
+      {/* ── Mobile backdrop ── */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/40 z-40"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* ── Sidebar panel ── */}
+      <aside
+        className={cn(
+          'bg-white border-r flex flex-col py-6 px-3 shrink-0 z-50 transition-transform duration-200',
+          // Mobile: fixed overlay
+          'fixed inset-y-0 left-0 w-64 md:relative md:w-56 md:translate-x-0',
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        )}
+      >
+        {/* Mobile close button */}
+        <button
+          className="md:hidden absolute top-3 right-3 p-1 text-muted-foreground hover:text-foreground"
+          onClick={() => setOpen(false)}
+          aria-label="Fechar menu"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="px-3 mb-8 flex items-center gap-2">
+          <BasketIcon size={28} color="#92400e" />
+          <div>
+            <p className="text-xs font-bold text-amber-900 leading-none">EMPRESA DE</p>
+            <p className="text-base font-black text-amber-900 leading-none tracking-tight">CESTAS</p>
+          </div>
+        </div>
+
+        {navLinks}
+      </aside>
+    </>
   )
 }
