@@ -49,33 +49,44 @@ export default function CatalogoPage() {
   useEffect(() => { loadItems() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadItems() {
-    const supabase = createClient()
-    const [{ data }, { data: { user } }] = await Promise.all([
-      supabase
-        .from('catalog_items')
-        .select('id, basket_id, description, visible, images, baskets(name, category, sale_price)')
-        .order('created_at', { ascending: false }),
-      supabase.auth.getUser(),
-    ])
+    try {
+      const supabase = createClient()
+      const [{ data, error }, { data: authData }] = await Promise.all([
+        supabase
+          .from('catalog_items')
+          .select('id, basket_id, description, visible, images, baskets(name, category, sale_price)')
+          .order('created_at', { ascending: false }),
+        supabase.auth.getUser(),
+      ])
 
-    if (user) setUserId(user.id)
+      if (authData.user) setUserId(authData.user.id)
 
-    if (data) {
-      setItems(data.map((item) => {
-        const basket = item.baskets as { name: string; category: string; sale_price: number }
-        return {
-          id: item.id,
-          basket_id: item.basket_id,
-          name: basket.name,
-          category: basket.category,
-          price: basket.sale_price,
-          description: item.description,
-          visible: item.visible,
-          images: (item.images as string[]) ?? [],
-        }
-      }))
+      if (error) {
+        console.error('catalog query error:', error)
+      } else if (data) {
+        setItems(
+          data
+            .filter((item) => item.baskets != null)
+            .map((item) => {
+              const basket = item.baskets as { name: string; category: string; sale_price: number }
+              return {
+                id: item.id,
+                basket_id: item.basket_id,
+                name: basket.name,
+                category: basket.category,
+                price: basket.sale_price,
+                description: item.description,
+                visible: item.visible,
+                images: (item.images as string[]) ?? [],
+              }
+            })
+        )
+      }
+    } catch (err) {
+      console.error('loadItems failed:', err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function toggleVisibility(id: string, visible: boolean) {
