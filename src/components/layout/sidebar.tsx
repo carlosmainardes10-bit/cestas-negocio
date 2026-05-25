@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { BasketIcon } from '@/components/Logo'
@@ -21,6 +22,7 @@ import {
   GraduationCap,
   Scale,
   UserCircle,
+  ShieldCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -42,9 +44,19 @@ const nav = [
   { href: '/perfil', label: 'Perfil', icon: UserCircle },
 ]
 
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email === ADMIN_EMAIL) setIsAdmin(true)
+    })
+  }, [])
 
   async function handleLogout() {
     const supabase = createClient()
@@ -80,6 +92,20 @@ export function Sidebar() {
             {label}
           </Link>
         ))}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              pathname === '/admin'
+                ? 'bg-amber-50 text-amber-900'
+                : 'text-muted-foreground hover:bg-gray-50 hover:text-foreground'
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
       </nav>
 
       <Button

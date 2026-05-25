@@ -40,7 +40,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/calendario') ||
     pathname.startsWith('/treinamentos') ||
     pathname.startsWith('/negocio-legal') ||
-    pathname.startsWith('/perfil')
+    pathname.startsWith('/perfil') ||
+    pathname.startsWith('/admin')
 
   if (!user && (isDashboardRoute || pathname.startsWith('/onboarding'))) {
     const url = request.nextUrl.clone()
