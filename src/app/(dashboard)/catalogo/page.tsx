@@ -198,10 +198,16 @@ export default function CatalogoPage() {
       </div>
 
       {items.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <BookImage className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Nenhuma cesta no catálogo ainda.</p>
-          <p className="text-sm mt-1">Use a calculadora para criar e cadastrar sua primeira cesta.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <BookImage className="h-14 w-14 text-amber-300 mb-4" />
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Seu catálogo está vazio</h2>
+          <p className="text-sm text-muted-foreground mb-6 max-w-xs">
+            Crie sua primeira cesta na Calculadora — ela calcula o lucro e já adiciona aqui automaticamente.
+          </p>
+          <Button onClick={() => router.push('/calculadora')} className="bg-amber-600 hover:bg-amber-700">
+            <Plus className="h-4 w-4 mr-2" />
+            Criar minha primeira cesta
+          </Button>
         </div>
       ) : (
         <>
