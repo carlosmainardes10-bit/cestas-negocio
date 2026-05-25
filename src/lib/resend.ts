@@ -73,6 +73,23 @@ export async function sendWelcomeEmail(to: string, name: string) {
   })
 }
 
+export async function sendNewUserNotificationEmail(userName: string, userEmail: string) {
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
+  if (!adminEmail) return
+
+  return resend.emails.send({
+    from: FROM,
+    to: adminEmail,
+    subject: `Novo cadastro: ${userName}`,
+    html: baseLayout(`
+      <h1 style="margin:0 0 16px;font-size:20px;color:#1f2937">Novo cadastro 🎉</h1>
+      <p style="margin:0 0 8px;color:#374151;font-size:15px"><strong>Nome:</strong> ${userName}</p>
+      <p style="margin:0 0 8px;color:#374151;font-size:15px"><strong>E-mail:</strong> ${userEmail}</p>
+      <p style="margin:0;color:#9ca3af;font-size:13px;margin-top:16px">${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>
+    `),
+  })
+}
+
 export async function sendPaymentFailedEmail(to: string, name: string) {
   const html = baseLayout(`
     <h1 style="margin:0 0 8px;font-size:22px;color:#1f2937">Ops! Problema com seu pagamento 💳</h1>

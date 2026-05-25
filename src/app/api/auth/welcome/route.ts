@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendWelcomeEmail } from '@/lib/resend'
+import { sendWelcomeEmail, sendNewUserNotificationEmail } from '@/lib/resend'
 
 export async function POST() {
   try {
@@ -17,7 +17,10 @@ export async function POST() {
     const name = profile?.name ?? user.email?.split('@')[0] ?? 'empreendedora'
     const email = user.email!
 
-    await sendWelcomeEmail(email, name)
+    await Promise.all([
+      sendWelcomeEmail(email, name),
+      sendNewUserNotificationEmail(name, email),
+    ])
 
     return NextResponse.json({ ok: true })
   } catch (error) {
