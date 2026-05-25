@@ -128,9 +128,12 @@ export default function PerfilPage() {
         <p className="text-muted-foreground text-sm mb-6">
           Assine um plano para personalizar seu perfil e logo do negócio.
         </p>
-        <Button asChild className="bg-amber-600 hover:bg-amber-700">
-          <Link href="/assinatura">Ver planos</Link>
-        </Button>
+        <Link
+          href="/assinatura"
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 transition-colors"
+        >
+          Ver planos
+        </Link>
       </div>
     )
   }
