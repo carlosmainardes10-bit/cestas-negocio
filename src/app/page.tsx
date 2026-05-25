@@ -77,7 +77,7 @@ export default async function LandingPage() {
                 href={WA_LINK}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold text-base px-6 py-3 rounded-2xl transition-colors w-fit"
+                className="inline-flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold text-base px-6 py-3 rounded-2xl transition-colors w-full sm:w-fit"
               >
                 <WhatsAppIcon />
                 Saiba mais pelo WhatsApp
