@@ -12,6 +12,8 @@ export interface Database {
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           whatsapp: string | null
+          business_name: string | null
+          avatar_url: string | null
           created_at: string
         }
         Insert: {
@@ -22,6 +24,8 @@ export interface Database {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           whatsapp?: string | null
+          business_name?: string | null
+          avatar_url?: string | null
           created_at?: string
         }
         Update: {
@@ -30,6 +34,8 @@ export interface Database {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           whatsapp?: string | null
+          business_name?: string | null
+          avatar_url?: string | null
         }
         Relationships: []
       }

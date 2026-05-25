@@ -20,6 +20,7 @@ import {
   CalendarDays,
   GraduationCap,
   Scale,
+  UserCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -38,6 +39,7 @@ const nav = [
   { href: '/treinamentos', label: 'Treinamentos', icon: GraduationCap },
   { href: '/negocio-legal', label: 'Negócio Legal', icon: Scale },
   { href: '/assinatura', label: 'Assinatura', icon: Crown },
+  { href: '/perfil', label: 'Perfil', icon: UserCircle },
 ]
 
 export function Sidebar() {
