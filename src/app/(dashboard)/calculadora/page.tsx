@@ -36,15 +36,15 @@ const PRODUCT_CATEGORIES: Record<string, string> = {
 
 const itemSchema = z.object({
   name: z.string().min(1, 'Nome obrigatório'),
-  cost: z.number().min(0, 'Custo inválido'),
+  cost: z.number().min(0, 'Custo inválido').catch(0),
 })
 
 const schema = z.object({
   basketName: z.string().min(1, 'Nome da cesta obrigatório'),
   salePrice: z.number().min(0.01, 'Preço de venda obrigatório'),
-  laborCost: z.number().min(0),
-  packagingCost: z.number().min(0),
-  marketingCost: z.number().min(0),
+  laborCost: z.number().min(0).catch(0),
+  packagingCost: z.number().min(0).catch(0),
+  marketingCost: z.number().min(0).catch(0),
   items: z.array(itemSchema).min(1, 'Adicione ao menos um produto'),
 })
 
@@ -183,6 +183,9 @@ export default function CalculadoraPage() {
                 <div key={field.id} className="flex gap-2 items-start">
                   <div className="flex-1">
                     <Input placeholder="Produto" {...register(`items.${index}.name`)} />
+                    {Array.isArray(errors.items) && errors.items[index]?.name?.message && (
+                      <p className="text-sm text-red-500">{errors.items[index].name!.message}</p>
+                    )}
                   </div>
                   <div className="w-28">
                     <Input type="number" step="0.01" placeholder="R$ 0,00" {...register(`items.${index}.cost`, { valueAsNumber: true })} />
@@ -192,7 +195,9 @@ export default function CalculadoraPage() {
                   </Button>
                 </div>
               ))}
-              {errors.items && <p className="text-sm text-red-500">{errors.items.message}</p>}
+              {errors.items && !Array.isArray(errors.items) && (
+                <p className="text-sm text-red-500">{errors.items.message}</p>
+              )}
             </CardContent>
           </Card>
 
