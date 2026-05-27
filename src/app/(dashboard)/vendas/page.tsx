@@ -397,6 +397,53 @@ export default function VendasPage() {
     if (editing) {
       const { error } = await supabase.from('orders').update(payload).eq('id', editing.id)
       if (error) { toast.error('Erro ao atualizar venda'); setSaving(false); return }
+
+      // Sync revenue transaction
+      const oldRevDesc = editing.basket_name
+        ? `${editing.basket_name} — ${editing.recipient_name}`
+        : `Venda para ${editing.recipient_name}`
+      const newRevDesc = data.basket_name
+        ? `${data.basket_name} — ${data.recipient_name}`
+        : `Venda para ${data.recipient_name}`
+      await supabase
+        .from('transactions')
+        .update({ amount: data.total_amount, description: newRevDesc, date: data.purchase_date })
+        .eq('user_id', user.id)
+        .eq('type', 'in')
+        .eq('description', oldRevDesc)
+        .eq('date', editing.purchase_date)
+
+      // Sync cost transaction
+      const oldCostDesc = `Custo: ${editing.basket_name || 'cesta'} — ${editing.recipient_name}`
+      const newCostDesc = `Custo: ${data.basket_name || 'cesta'} — ${data.recipient_name}`
+      const oldCost = editing.cost ?? 0
+      const newCost = data.cost ?? 0
+      if (oldCost > 0 && newCost > 0) {
+        await supabase
+          .from('transactions')
+          .update({ amount: newCost, description: newCostDesc, date: data.purchase_date })
+          .eq('user_id', user.id)
+          .eq('type', 'out')
+          .eq('description', oldCostDesc)
+          .eq('date', editing.purchase_date)
+      } else if (oldCost > 0 && newCost === 0) {
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('type', 'out')
+          .eq('description', oldCostDesc)
+          .eq('date', editing.purchase_date)
+      } else if (oldCost === 0 && newCost > 0) {
+        await supabase.from('transactions').insert({
+          user_id: user.id,
+          type: 'out',
+          amount: newCost,
+          description: newCostDesc,
+          date: data.purchase_date,
+        })
+      }
+
       toast.success('Venda atualizada')
     } else {
       const { error } = await supabase.from('orders').insert({ ...payload, user_id: user.id })
