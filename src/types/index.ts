@@ -34,6 +34,7 @@ export interface Basket {
   name: string
   category: BasketCategory
   sale_price: number
+  sale_price_for_2: number | null
   created_at: string
   items?: BasketItem[]
 }

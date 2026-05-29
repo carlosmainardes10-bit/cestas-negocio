@@ -64,13 +64,16 @@ export default function CalculadoraPage() {
   const [dbProducts, setDbProducts] = useState<Product[]>([])
   const [basketItems, setBasketItems] = useState<BasketEntry[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
+  const [isFor2, setIsFor2] = useState(false)
   const [result, setResult] = useState<{
     totalCost: number; profit: number; margin: number
     suggestedPrice: number; basketName: string; salePrice: number
     items: BasketEntry[]
+    totalCostFor2: number; suggestedPriceFor2: number
   } | null>(null)
   const [category, setCategory] = useState<BasketCategory | null>(null)
   const [description, setDescription] = useState('')
+  const [priceFor2, setPriceFor2] = useState('')
   const [saving, setSaving] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -112,12 +115,19 @@ export default function CalculadoraPage() {
     }
     const productsCost = basketItems.reduce((sum, item) => sum + item.product.cost * item.quantity, 0)
     const totalCost = productsCost + data.laborCost + data.packagingCost + data.marketingCost
+    const totalCostFor2 = productsCost * 2 + data.laborCost + data.packagingCost + data.marketingCost
     const profit = data.salePrice - totalCost
     const margin = data.salePrice > 0 ? (profit / data.salePrice) * 100 : 0
     const suggestedPrice = totalCost / 0.6
-    setResult({ totalCost, profit, margin, suggestedPrice, basketName: data.basketName, salePrice: data.salePrice, items: basketItems })
+    const suggestedPriceFor2 = totalCostFor2 / 0.6
+    setResult({
+      totalCost, profit, margin, suggestedPrice,
+      basketName: data.basketName, salePrice: data.salePrice, items: basketItems,
+      totalCostFor2, suggestedPriceFor2,
+    })
     setCategory(null)
     setDescription('')
+    setPriceFor2('')
   }
 
   async function saveToCatalog() {
@@ -138,6 +148,11 @@ export default function CalculadoraPage() {
       await supabase.from('basket_items').insert(
         result.items.map(item => ({ basket_id: basket.id, product_id: item.product.id, quantity: item.quantity }))
       )
+    }
+
+    const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
+    if (parsedPriceFor2 && parsedPriceFor2 > 0) {
+      await supabase.from('baskets').update({ sale_price_for_2: parsedPriceFor2 }).eq('id', basket.id)
     }
 
     const { error: catalogError } = await supabase
@@ -296,6 +311,26 @@ export default function CalculadoraPage() {
                   </div>
                 </div>
               )}
+
+              {/* Toggle: cesta para 2 pessoas */}
+              <label className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer border transition-colors ${
+                isFor2 ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-amber-300'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={isFor2}
+                  onChange={(e) => setIsFor2(e.target.checked)}
+                  className="h-4 w-4 accent-amber-600"
+                />
+                <div>
+                  <span className="text-sm font-medium">Cesta para 2 pessoas</span>
+                  {isFor2 && basketItems.length > 0 && (
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Custo dobrado: {formatCurrency(productsCost * 2)}
+                    </p>
+                  )}
+                </div>
+              </label>
             </CardContent>
           </Card>
         </div>
@@ -361,6 +396,22 @@ export default function CalculadoraPage() {
             </CardContent>
           </Card>
 
+          {isFor2 && (
+            <Card className="border-2 border-blue-200 bg-blue-50">
+              <CardHeader><CardTitle className="text-base">Para 2 pessoas</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Custo total</span>
+                  <span className="font-medium">{formatCurrency(result.totalCostFor2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Preço sugerido (40% margem)</span>
+                  <span className="font-semibold text-blue-700">{formatCurrency(result.suggestedPriceFor2)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -390,6 +441,18 @@ export default function CalculadoraPage() {
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
+              {isFor2 && (
+                <div className="space-y-1">
+                  <Label>Preço para 2 pessoas (R$) <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder={`Sugerido: ${formatCurrency(result.suggestedPriceFor2)}`}
+                    value={priceFor2}
+                    onChange={(e) => setPriceFor2(e.target.value)}
+                  />
+                </div>
+              )}
               <Button className="w-full" onClick={saveToCatalog} disabled={!category || saving}>
                 {saving ? 'Salvando...' : 'Salvar no catálogo'}
               </Button>

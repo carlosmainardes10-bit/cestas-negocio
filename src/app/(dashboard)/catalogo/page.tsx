@@ -19,6 +19,7 @@ interface CatalogItem {
   name: string
   category: string
   price: number
+  priceFor2: number | null
   description: string
   visible: boolean
   images: string[]
@@ -57,7 +58,7 @@ export default function CatalogoPage() {
       const [{ data, error }, { data: authData }] = await Promise.all([
         supabase
           .from('catalog_items')
-          .select('id, basket_id, description, visible, images, baskets(name, category, sale_price)')
+          .select('id, basket_id, description, visible, images, baskets(name, category, sale_price, sale_price_for_2)')
           .order('created_at', { ascending: false }),
         supabase.auth.getUser(),
       ])
@@ -71,13 +72,14 @@ export default function CatalogoPage() {
           data
             .filter((item) => item.baskets != null)
             .map((item) => {
-              const basket = item.baskets as { name: string; category: string; sale_price: number }
+              const basket = item.baskets as { name: string; category: string; sale_price: number; sale_price_for_2: number | null }
               return {
                 id: item.id,
                 basket_id: item.basket_id,
                 name: basket.name,
                 category: basket.category,
                 price: basket.sale_price,
+                priceFor2: basket.sale_price_for_2 ?? null,
                 description: item.description,
                 visible: item.visible,
                 images: (item.images as string[]) ?? [],
@@ -157,8 +159,13 @@ export default function CatalogoPage() {
     type ItemRow = { quantity: number; products: { name: string } | null }
     const basketItems = (rawItems ?? []) as ItemRow[]
 
-    const price = formatCurrency(item.price)
-    let message = `🧺 ${item.name} — ${price}\n`
+    let message = `🧺 ${item.name}\n`
+    if (item.priceFor2) {
+      message += `1 pessoa: ${formatCurrency(item.price)}\n`
+      message += `2 pessoas: ${formatCurrency(item.priceFor2)}\n`
+    } else {
+      message += `${formatCurrency(item.price)}\n`
+    }
 
     const productLines = basketItems
       .filter(bi => bi.products)
@@ -325,7 +332,12 @@ export default function CatalogoPage() {
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{item.description || 'Sem descrição'}</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-amber-700">{formatCurrency(item.price)}</span>
+                    <div>
+                      <span className="text-lg font-bold text-amber-700">{formatCurrency(item.price)}</span>
+                      {item.priceFor2 && (
+                        <p className="text-xs text-muted-foreground">2 pessoas: {formatCurrency(item.priceFor2)}</p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"

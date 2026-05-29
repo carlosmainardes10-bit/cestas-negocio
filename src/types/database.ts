@@ -87,6 +87,7 @@ export interface Database {
           name: string
           category: 'romantica' | 'premium' | 'fitness' | 'corporativa' | 'economica'
           sale_price: number
+          sale_price_for_2: number | null
           created_at: string
         }
         Insert: {
@@ -95,12 +96,14 @@ export interface Database {
           name: string
           category: 'romantica' | 'premium' | 'fitness' | 'corporativa' | 'economica'
           sale_price?: number
+          sale_price_for_2?: number | null
           created_at?: string
         }
         Update: {
           name?: string
           category?: 'romantica' | 'premium' | 'fitness' | 'corporativa' | 'economica'
           sale_price?: number
+          sale_price_for_2?: number | null
         }
         Relationships: [
           {

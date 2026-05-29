@@ -6,6 +6,7 @@ interface BasketData {
   name: string
   category: string
   sale_price: number
+  sale_price_for_2: number | null
 }
 
 interface CatalogRow {
@@ -44,13 +45,13 @@ export default async function PublicCatalogPage({
   const { data, error } = idList
     ? await supabase
         .from('catalog_items')
-        .select('id, description, images, baskets(name, category, sale_price)')
+        .select('id, description, images, baskets(name, category, sale_price, sale_price_for_2)')
         .eq('user_id', userId)
         .in('id', idList)
         .order('created_at', { ascending: false })
     : await supabase
         .from('catalog_items')
-        .select('id, description, images, baskets(name, category, sale_price)')
+        .select('id, description, images, baskets(name, category, sale_price, sale_price_for_2)')
         .eq('user_id', userId)
         .eq('visible', true)
         .order('created_at', { ascending: false })
@@ -106,9 +107,18 @@ export default async function PublicCatalogPage({
                     {item.description && (
                       <p className="text-sm text-gray-500 mb-3">{item.description}</p>
                     )}
-                    <p className="text-xl font-bold text-amber-700">
-                      {formatCurrency(basket.sale_price)}
-                    </p>
+                    {basket.sale_price_for_2 ? (
+                      <div>
+                        <p className="text-sm text-gray-500">1 pessoa</p>
+                        <p className="text-xl font-bold text-amber-700">{formatCurrency(basket.sale_price)}</p>
+                        <p className="text-sm text-gray-500 mt-1">2 pessoas</p>
+                        <p className="text-xl font-bold text-amber-700">{formatCurrency(basket.sale_price_for_2)}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xl font-bold text-amber-700">
+                        {formatCurrency(basket.sale_price)}
+                      </p>
+                    )}
                   </div>
                 </div>
               )
