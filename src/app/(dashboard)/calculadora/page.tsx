@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm, useFieldArray } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, TrendingUp, BookImage, Database } from 'lucide-react'
+import { TrendingUp, BookImage, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import type { Product } from '@/types'
@@ -16,7 +16,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type BasketCategory = 'romantica' | 'premium' | 'fitness' | 'corporativa' | 'economica'
 
@@ -31,14 +30,20 @@ const CATEGORY_LABELS: Record<BasketCategory, string> = {
 const PRODUCT_CATEGORIES: Record<string, string> = {
   padaria: 'Padaria', laticinios: 'Laticínios', doces: 'Doces',
   bebidas: 'Bebidas', frutas: 'Frutas', salgados: 'Salgados',
+  charcutaria: 'Charcutaria', bebidas_alcoolicas: 'Bebidas Alcoólicas', mercearia: 'Mercearia',
   embalagem: 'Embalagem', outros: 'Outros',
 }
 
-const itemSchema = z.object({
-  name: z.string().min(1, 'Nome obrigatório'),
-  cost: z.number().min(0, 'Custo inválido').catch(0),
-  productId: z.string().optional(),
-})
+const CATEGORY_EMOJI: Record<string, string> = {
+  padaria: '🍞', laticinios: '🥛', doces: '🍫', bebidas: '☕', frutas: '🍎',
+  salgados: '🫓', charcutaria: '🥩', bebidas_alcoolicas: '🍷', mercearia: '🛒',
+  embalagem: '📦', outros: '✨',
+}
+
+interface BasketEntry {
+  product: Product
+  quantity: number
+}
 
 const schema = z.object({
   basketName: z.string().min(1, 'Nome da cesta obrigatório'),
@@ -46,7 +51,6 @@ const schema = z.object({
   laborCost: z.number().min(0).catch(0),
   packagingCost: z.number().min(0).catch(0),
   marketingCost: z.number().min(0).catch(0),
-  items: z.array(itemSchema).min(1, 'Adicione ao menos um produto'),
 })
 
 type FormData = z.infer<typeof schema>
@@ -58,26 +62,21 @@ function formatCurrency(value: number) {
 export default function CalculadoraPage() {
   const router = useRouter()
   const [dbProducts, setDbProducts] = useState<Product[]>([])
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [search, setSearch] = useState('')
+  const [basketItems, setBasketItems] = useState<BasketEntry[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
   const [result, setResult] = useState<{
     totalCost: number; profit: number; margin: number
     suggestedPrice: number; basketName: string; salePrice: number
-    items: Array<{ name: string; cost: number; productId?: string }>
+    items: BasketEntry[]
   } | null>(null)
   const [category, setCategory] = useState<BasketCategory | null>(null)
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const { register, handleSubmit, control, setValue: setFormValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      basketName: '', salePrice: 0, laborCost: 0, packagingCost: 0, marketingCost: 0,
-      items: [{ name: '', cost: 0 }],
-    },
+    defaultValues: { basketName: '', salePrice: 0, laborCost: 0, packagingCost: 0, marketingCost: 0 },
   })
-
-  const { fields, append, remove } = useFieldArray({ control, name: 'items' })
 
   useEffect(() => {
     createClient()
@@ -87,19 +86,36 @@ export default function CalculadoraPage() {
       .then(({ data }) => { if (data) setDbProducts(data as Product[]) })
   }, [])
 
-  function pickProduct(product: Product) {
-    append({ name: product.name, cost: product.cost, productId: product.id })
-    setPickerOpen(false)
-    setSearch('')
+  function addProduct(product: Product) {
+    setBasketItems(prev => {
+      const idx = prev.findIndex(i => i.product.id === product.id)
+      if (idx >= 0) {
+        return prev.map((item, n) => n === idx ? { ...item, quantity: item.quantity + 1 } : item)
+      }
+      return [...prev, { product, quantity: 1 }]
+    })
+  }
+
+  function removeProduct(index: number) {
+    setBasketItems(prev => {
+      if (prev[index].quantity > 1) {
+        return prev.map((item, i) => i === index ? { ...item, quantity: item.quantity - 1 } : item)
+      }
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   function onSubmit(data: FormData) {
-    const productsCost = data.items.reduce((sum, item) => sum + item.cost, 0)
+    if (basketItems.length === 0) {
+      toast.error('Adicione ao menos um produto à cesta')
+      return
+    }
+    const productsCost = basketItems.reduce((sum, item) => sum + item.product.cost * item.quantity, 0)
     const totalCost = productsCost + data.laborCost + data.packagingCost + data.marketingCost
     const profit = data.salePrice - totalCost
     const margin = data.salePrice > 0 ? (profit / data.salePrice) * 100 : 0
     const suggestedPrice = totalCost / 0.6
-    setResult({ totalCost, profit, margin, suggestedPrice, basketName: data.basketName, salePrice: data.salePrice, items: data.items })
+    setResult({ totalCost, profit, margin, suggestedPrice, basketName: data.basketName, salePrice: data.salePrice, items: basketItems })
     setCategory(null)
     setDescription('')
   }
@@ -118,10 +134,9 @@ export default function CalculadoraPage() {
 
     if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
 
-    const dbItems = result.items.filter(i => i.productId)
-    if (dbItems.length > 0) {
+    if (result.items.length > 0) {
       await supabase.from('basket_items').insert(
-        dbItems.map(item => ({ basket_id: basket.id, product_id: item.productId!, quantity: 1 }))
+        result.items.map(item => ({ basket_id: basket.id, product_id: item.product.id, quantity: item.quantity }))
       )
     }
 
@@ -136,15 +151,11 @@ export default function CalculadoraPage() {
     router.push('/catalogo')
   }
 
-  const filteredProducts = dbProducts.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.brand?.toLowerCase().includes(search.toLowerCase()) ||
-    p.store?.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const groupedFiltered = Object.entries(PRODUCT_CATEGORIES)
-    .map(([key, label]) => ({ key, label, items: filteredProducts.filter(p => p.category === key) }))
+  const groupedProducts = Object.entries(PRODUCT_CATEGORIES)
+    .map(([key, label]) => ({ key, label, items: dbProducts.filter(p => p.category === key) }))
     .filter(g => g.items.length > 0)
+
+  const productsCost = basketItems.reduce((sum, item) => sum + item.product.cost * item.quantity, 0)
 
   return (
     <div>
@@ -153,210 +164,239 @@ export default function CalculadoraPage() {
         <p className="text-muted-foreground">Saiba exatamente quanto você lucra em cada cesta</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Dados da Cesta</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1">
+              <Label>Nome da cesta</Label>
+              <Input placeholder="Ex: Cesta Romântica" {...register('basketName')} />
+              {errors.basketName && <p className="text-sm text-red-500">{errors.basketName.message}</p>}
+            </div>
+            <div className="space-y-1">
+              <Label>Preço de venda (R$)</Label>
+              <Input type="number" step="0.01" placeholder="0,00" {...register('salePrice', { valueAsNumber: true })} />
+              {errors.salePrice && <p className="text-sm text-red-500">{errors.salePrice.message}</p>}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Products + Basket */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* LEFT: Product catalog */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Dados da Cesta</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1">
-                <Label>Nome da cesta</Label>
-                <Input placeholder="Ex: Cesta Romântica" {...register('basketName')} />
-                {errors.basketName && <p className="text-sm text-red-500">{errors.basketName.message}</p>}
-              </div>
-              <div className="space-y-1">
-                <Label>Preço de venda (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0,00" {...register('salePrice', { valueAsNumber: true })} />
-                {errors.salePrice && <p className="text-sm text-red-500">{errors.salePrice.message}</p>}
-              </div>
+            <CardHeader>
+              <CardTitle className="text-base">Produtos disponíveis</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Arraste ou clique para adicionar à cesta</p>
+            </CardHeader>
+            <CardContent className="p-3 pt-0">
+              {dbProducts.length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">Nenhum produto cadastrado ainda.</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => router.push('/produtos')}>
+                    Cadastrar produtos
+                  </Button>
+                </div>
+              ) : (
+                <div className="max-h-[420px] overflow-y-auto space-y-4 pr-1">
+                  {groupedProducts.map(group => (
+                    <div key={group.key}>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <span>{CATEGORY_EMOJI[group.key] ?? '•'}</span>
+                        {group.label}
+                      </p>
+                      <div className="space-y-1">
+                        {group.items.map(product => (
+                          <div
+                            key={product.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('productId', product.id)
+                              e.dataTransfer.effectAllowed = 'copy'
+                            }}
+                            onClick={() => addProduct(product)}
+                            className="flex items-center justify-between px-3 py-2 rounded-lg border border-transparent hover:border-amber-300 hover:bg-amber-50 cursor-grab active:cursor-grabbing select-none transition-colors"
+                          >
+                            <span className="text-sm">{product.name}</span>
+                            <span className="text-xs text-amber-700 shrink-0 ml-2">
+                              {formatCurrency(product.cost)}/{product.unit}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
+          {/* RIGHT: Basket drop zone */}
           <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Produtos</CardTitle>
-                <div className="flex gap-2">
-                  {dbProducts.length > 0 && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-                      <Database className="h-3.5 w-3.5 mr-1" /> Da base
-                    </Button>
-                  )}
-                  <Button type="button" variant="outline" size="sm" onClick={() => append({ name: '', cost: 0 })}>
-                    <Plus className="h-4 w-4 mr-1" /> Manual
-                  </Button>
-                </div>
+            <CardHeader><CardTitle className="text-base">Sua cesta</CardTitle></CardHeader>
+            <CardContent className="p-3 pt-0 flex flex-col gap-3">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false) }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setIsDragOver(false)
+                  const productId = e.dataTransfer.getData('productId')
+                  const product = dbProducts.find(p => p.id === productId)
+                  if (product) addProduct(product)
+                }}
+                className={`rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-4 transition-all min-h-[150px] ${
+                  isDragOver
+                    ? 'border-amber-500 bg-amber-50 scale-[1.01]'
+                    : 'border-gray-200 hover:border-amber-300'
+                }`}
+              >
+                <svg
+                  viewBox="0 0 120 100"
+                  className={`w-24 h-20 transition-transform duration-150 ${isDragOver ? 'scale-110' : ''}`}
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M42,42 Q60,18 78,42" fill="none" stroke="#b45309" strokeWidth="3" strokeLinecap="round"/>
+                  <path d="M22,50 L28,84 L92,84 L98,50 Z" fill="#fef3c7" stroke="#b45309" strokeWidth="2"/>
+                  <line x1="23" y1="60" x2="97" y2="60" stroke="#d97706" strokeWidth="1.5" opacity="0.6"/>
+                  <line x1="24" y1="70" x2="96" y2="70" stroke="#d97706" strokeWidth="1.5" opacity="0.6"/>
+                  <line x1="25" y1="80" x2="95" y2="80" stroke="#d97706" strokeWidth="1.5" opacity="0.6"/>
+                  <line x1="38" y1="50" x2="32" y2="84" stroke="#d97706" strokeWidth="1" opacity="0.4"/>
+                  <line x1="53" y1="50" x2="52" y2="84" stroke="#d97706" strokeWidth="1" opacity="0.4"/>
+                  <line x1="67" y1="50" x2="68" y2="84" stroke="#d97706" strokeWidth="1" opacity="0.4"/>
+                  <line x1="82" y1="50" x2="88" y2="84" stroke="#d97706" strokeWidth="1" opacity="0.4"/>
+                </svg>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {isDragOver ? '🎯 Solte aqui!' : basketItems.length === 0 ? 'Arraste produtos aqui' : 'Arraste mais produtos'}
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {fields.map((field, index) => (
-                <div key={field.id} className="flex gap-2 items-start">
-                  <div className="flex-1">
-                    <Input placeholder="Produto" {...register(`items.${index}.name`)} />
-                    {Array.isArray(errors.items) && errors.items[index]?.name?.message && (
-                      <p className="text-sm text-red-500">{errors.items[index].name!.message}</p>
-                    )}
+
+              {basketItems.length > 0 && (
+                <div className="space-y-1">
+                  {basketItems.map((entry, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-100">
+                      <span className="text-sm flex-1 truncate">{entry.product.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">×{entry.quantity}</span>
+                      <span className="text-sm font-medium text-amber-700 shrink-0">
+                        {formatCurrency(entry.product.cost * entry.quantity)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeProduct(i)}
+                        className="shrink-0 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Remover uma unidade"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex justify-between pt-1.5 border-t border-amber-200 px-1">
+                    <span className="text-sm text-muted-foreground">Subtotal produtos</span>
+                    <span className="text-sm font-semibold">{formatCurrency(productsCost)}</span>
                   </div>
-                  <div className="w-28">
-                    <Input type="number" step="0.01" placeholder="R$ 0,00" {...register(`items.${index}.cost`, { valueAsNumber: true })} />
-                  </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} disabled={fields.length === 1}>
-                    <Trash2 className="h-4 w-4 text-red-400" />
-                  </Button>
                 </div>
-              ))}
-              {errors.items && !Array.isArray(errors.items) && (
-                <p className="text-sm text-red-500">{errors.items.message}</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Outros Custos</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-1">
+              <Label>Mão de obra (R$)</Label>
+              <Input type="number" step="0.01" placeholder="0,00" {...register('laborCost', { valueAsNumber: true })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Embalagem / frete (R$)</Label>
+              <Input type="number" step="0.01" placeholder="0,00" {...register('packagingCost', { valueAsNumber: true })} />
+            </div>
+            <div className="space-y-1">
+              <Label>Marketing (R$)</Label>
+              <Input type="number" step="0.01" placeholder="0,00" {...register('marketingCost', { valueAsNumber: true })} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Button type="submit" className="w-full">
+          <TrendingUp className="h-4 w-4 mr-2" /> Calcular Lucro
+        </Button>
+      </form>
+
+      {result && (
+        <div className="space-y-4 mt-6">
+          <Card className="border-2 border-amber-200 bg-amber-50">
+            <CardHeader><CardTitle className="text-base">Resultado</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Custo total</span>
+                <span className="font-medium">{formatCurrency(result.totalCost)}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between text-lg font-bold">
+                <span>Lucro líquido</span>
+                <span className={result.profit >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  {formatCurrency(result.profit)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Margem de lucro</span>
+                <Badge variant={result.margin >= 40 ? 'default' : 'destructive'}>
+                  {result.margin.toFixed(1)}%
+                </Badge>
+              </div>
+              {result.margin < 40 ? (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 font-medium">Margem abaixo de 40%</p>
+                  <p className="text-sm text-red-600 mt-1">
+                    Preço sugerido: <strong>{formatCurrency(result.suggestedPrice)}</strong>
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-700 font-medium">Boa margem de lucro!</p>
+                  <p className="text-sm text-green-600">Você está precificando bem essa cesta.</p>
+                </div>
               )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Outros Custos</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <BookImage className="h-4 w-4 text-amber-600" />
+                <CardTitle className="text-base">Cadastrar no catálogo?</CardTitle>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
-                <Label>Mão de obra (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0,00" {...register('laborCost', { valueAsNumber: true })} />
+                <Label>Categoria</Label>
+                <Select onValueChange={(val) => val && setCategory(val as BasketCategory)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(CATEGORY_LABELS) as BasketCategory[]).map((key) => (
+                      <SelectItem key={key} value={key}>{CATEGORY_LABELS[key]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
-                <Label>Embalagem / frete (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0,00" {...register('packagingCost', { valueAsNumber: true })} />
+                <Label>Descrição <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                <Input
+                  placeholder="Ex: Perfeita para datas especiais"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
               </div>
-              <div className="space-y-1">
-                <Label>Marketing (R$)</Label>
-                <Input type="number" step="0.01" placeholder="0,00" {...register('marketingCost', { valueAsNumber: true })} />
-              </div>
+              <Button className="w-full" onClick={saveToCatalog} disabled={!category || saving}>
+                {saving ? 'Salvando...' : 'Salvar no catálogo'}
+              </Button>
             </CardContent>
           </Card>
-
-          <Button type="submit" className="w-full">
-            <TrendingUp className="h-4 w-4 mr-2" /> Calcular Lucro
-          </Button>
-        </form>
-
-        {result && (
-          <div className="space-y-4">
-            <Card className="border-2 border-amber-200 bg-amber-50">
-              <CardHeader><CardTitle className="text-base">Resultado</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Custo total</span>
-                  <span className="font-medium">{formatCurrency(result.totalCost)}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Lucro líquido</span>
-                  <span className={result.profit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {formatCurrency(result.profit)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Margem de lucro</span>
-                  <Badge variant={result.margin >= 40 ? 'default' : 'destructive'}>
-                    {result.margin.toFixed(1)}%
-                  </Badge>
-                </div>
-                {result.margin < 40 ? (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-700 font-medium">Margem abaixo de 40%</p>
-                    <p className="text-sm text-red-600 mt-1">
-                      Preço sugerido: <strong>{formatCurrency(result.suggestedPrice)}</strong>
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm text-green-700 font-medium">Boa margem de lucro!</p>
-                    <p className="text-sm text-green-600">Você está precificando bem essa cesta.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <BookImage className="h-4 w-4 text-amber-600" />
-                  <CardTitle className="text-base">Cadastrar no catálogo?</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1">
-                  <Label>Categoria</Label>
-                  <Select onValueChange={(val) => val && setCategory(val as BasketCategory)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecione a categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(CATEGORY_LABELS) as BasketCategory[]).map((key) => (
-                        <SelectItem key={key} value={key}>{CATEGORY_LABELS[key]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Descrição <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                  <Input
-                    placeholder="Ex: Perfeita para datas especiais"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-                <Button className="w-full" onClick={saveToCatalog} disabled={!category || saving}>
-                  {saving ? 'Salvando...' : 'Salvar no catálogo'}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
-
-      {/* Seletor de produto da base */}
-      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Buscar produto da base</DialogTitle>
-          </DialogHeader>
-          <Input
-            placeholder="Buscar por nome, marca ou loja..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="mt-1"
-            autoFocus
-          />
-          <div className="max-h-80 overflow-y-auto space-y-3 mt-2">
-            {groupedFiltered.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum produto encontrado.</p>
-            ) : (
-              groupedFiltered.map(group => (
-                <div key={group.key}>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                    {group.label}
-                  </p>
-                  <div className="space-y-1">
-                    {group.items.map(product => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => pickProduct(product)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-amber-50 text-left transition-colors"
-                      >
-                        <div>
-                          <span className="text-sm font-medium">{product.name}</span>
-                          {product.brand && (
-                            <span className="text-xs text-muted-foreground ml-2">{product.brand}</span>
-                          )}
-                        </div>
-                        <span className="text-sm font-medium text-amber-700 shrink-0">
-                          {formatCurrency(product.cost)}/{product.unit}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   )
 }
