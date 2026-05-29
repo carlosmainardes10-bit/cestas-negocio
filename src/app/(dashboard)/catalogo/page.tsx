@@ -43,6 +43,7 @@ export default function CatalogoPage() {
   const [userId, setUserId] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [sharingWhatsapp, setSharingWhatsapp] = useState<string | null>(null)
+  const [quantityDialogItem, setQuantityDialogItem] = useState<CatalogItem | null>(null)
   const [shareSelectorOpen, setShareSelectorOpen] = useState(false)
   const [selectedForShare, setSelectedForShare] = useState<Set<string>>(new Set())
   const [photoItem, setPhotoItem] = useState<CatalogItem | null>(null)
@@ -148,8 +149,14 @@ export default function CatalogoPage() {
     setShareSelectorOpen(false)
   }
 
-  async function shareBasketOnWhatsapp(item: CatalogItem) {
+  function shareBasketOnWhatsapp(item: CatalogItem) {
+    setQuantityDialogItem(item)
+  }
+
+  async function doShareOnWhatsapp(item: CatalogItem, includeQuantities: boolean) {
     setSharingWhatsapp(item.id)
+    setQuantityDialogItem(null)
+
     const supabase = createClient()
     const { data: rawItems } = await supabase
       .from('basket_items')
@@ -169,7 +176,10 @@ export default function CatalogoPage() {
 
     const productLines = basketItems
       .filter(bi => bi.products)
-      .map(bi => `- ${bi.products!.name}`)
+      .map(bi => includeQuantities && bi.quantity > 1
+        ? `- ${bi.quantity}x ${bi.products!.name}`
+        : `- ${bi.products!.name}`
+      )
 
     if (productLines.length > 0) {
       message += `\nProdutos:\n${productLines.join('\n')}\n`
@@ -398,6 +408,35 @@ export default function CatalogoPage() {
           </div>
         </>
       )}
+
+      {/* ── Quantity dialog (WhatsApp share) ────────────────────────────────── */}
+      <Dialog open={!!quantityDialogItem} onOpenChange={(open) => !open && setQuantityDialogItem(null)}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Incluir quantidades dos produtos?</DialogTitle>
+            <DialogDescription>
+              Como deseja listar os produtos no compartilhamento?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full"
+              onClick={() => quantityDialogItem && doShareOnWhatsapp(quantityDialogItem, true)}
+              disabled={sharingWhatsapp !== null}
+            >
+              Sim, incluir (ex: 2x Pão francês)
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => quantityDialogItem && doShareOnWhatsapp(quantityDialogItem, false)}
+              disabled={sharingWhatsapp !== null}
+            >
+              Não, só os nomes (ex: Pão francês)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Share selector ───────────────────────────────────────────────────── */}
       <Dialog open={shareSelectorOpen} onOpenChange={setShareSelectorOpen}>
