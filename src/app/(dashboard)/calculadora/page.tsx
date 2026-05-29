@@ -37,6 +37,7 @@ const PRODUCT_CATEGORIES: Record<string, string> = {
 const itemSchema = z.object({
   name: z.string().min(1, 'Nome obrigatório'),
   cost: z.number().min(0, 'Custo inválido').catch(0),
+  productId: z.string().optional(),
 })
 
 const schema = z.object({
@@ -62,6 +63,7 @@ export default function CalculadoraPage() {
   const [result, setResult] = useState<{
     totalCost: number; profit: number; margin: number
     suggestedPrice: number; basketName: string; salePrice: number
+    items: Array<{ name: string; cost: number; productId?: string }>
   } | null>(null)
   const [category, setCategory] = useState<BasketCategory | null>(null)
   const [description, setDescription] = useState('')
@@ -86,7 +88,7 @@ export default function CalculadoraPage() {
   }, [])
 
   function pickProduct(product: Product) {
-    append({ name: product.name, cost: product.cost })
+    append({ name: product.name, cost: product.cost, productId: product.id })
     setPickerOpen(false)
     setSearch('')
   }
@@ -97,7 +99,7 @@ export default function CalculadoraPage() {
     const profit = data.salePrice - totalCost
     const margin = data.salePrice > 0 ? (profit / data.salePrice) * 100 : 0
     const suggestedPrice = totalCost / 0.6
-    setResult({ totalCost, profit, margin, suggestedPrice, basketName: data.basketName, salePrice: data.salePrice })
+    setResult({ totalCost, profit, margin, suggestedPrice, basketName: data.basketName, salePrice: data.salePrice, items: data.items })
     setCategory(null)
     setDescription('')
   }
@@ -115,6 +117,13 @@ export default function CalculadoraPage() {
       .select('id').single()
 
     if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
+
+    const dbItems = result.items.filter(i => i.productId)
+    if (dbItems.length > 0) {
+      await supabase.from('basket_items').insert(
+        dbItems.map(item => ({ basket_id: basket.id, product_id: item.productId!, quantity: 1 }))
+      )
+    }
 
     const { error: catalogError } = await supabase
       .from('catalog_items')

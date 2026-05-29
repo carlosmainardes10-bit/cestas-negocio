@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookImage, Share2, Eye, EyeOff, Plus, Trash2, Camera, X, ImagePlus } from 'lucide-react'
+import { BookImage, Share2, Eye, EyeOff, Plus, Trash2, Camera, X, ImagePlus, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,7 @@ export default function CatalogoPage() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [sharingWhatsapp, setSharingWhatsapp] = useState<string | null>(null)
   const [photoItem, setPhotoItem] = useState<CatalogItem | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -112,6 +113,34 @@ export default function CatalogoPage() {
     if (!userId) return
     navigator.clipboard.writeText(`${window.location.origin}/p/${userId}`)
     toast.success('Link copiado! Compartilhe com seus clientes.')
+  }
+
+  async function shareBasketOnWhatsapp(item: CatalogItem) {
+    setSharingWhatsapp(item.id)
+    const supabase = createClient()
+    const { data: rawItems } = await supabase
+      .from('basket_items')
+      .select('quantity, products(name)')
+      .eq('basket_id', item.basket_id)
+
+    type ItemRow = { quantity: number; products: { name: string } | null }
+    const basketItems = (rawItems ?? []) as ItemRow[]
+
+    const price = formatCurrency(item.price)
+    let message = `🧺 ${item.name} — ${price}\n`
+
+    const productLines = basketItems
+      .filter(bi => bi.products)
+      .map(bi => `- ${bi.products!.name}`)
+
+    if (productLines.length > 0) {
+      message += `\nProdutos:\n${productLines.join('\n')}\n`
+    }
+
+    message += `\nPeça já pelo WhatsApp!`
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
+    setSharingWhatsapp(null)
   }
 
   async function uploadPhoto(file: File) {
@@ -276,6 +305,17 @@ export default function CatalogoPage() {
                         {item.visible
                           ? <><Eye className="h-4 w-4 mr-1" />Visível</>
                           : <><EyeOff className="h-4 w-4 mr-1" />Oculto</>}
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => shareBasketOnWhatsapp(item)}
+                        disabled={sharingWhatsapp === item.id}
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                        title="Compartilhar no WhatsApp"
+                      >
+                        <MessageCircle className="h-4 w-4" />
                       </Button>
 
                       <Dialog>
