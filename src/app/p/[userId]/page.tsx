@@ -29,18 +29,31 @@ function formatCurrency(value: number) {
 
 export default async function PublicCatalogPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ userId: string }>
+  searchParams: Promise<{ ids?: string }>
 }) {
   const { userId } = await params
+  const { ids } = await searchParams
 
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('catalog_items')
-    .select('id, description, images, baskets(name, category, sale_price)')
-    .eq('user_id', userId)
-    .eq('visible', true)
-    .order('created_at', { ascending: false })
+
+  const idList = ids ? ids.split(',').filter(Boolean) : null
+
+  const { data, error } = idList
+    ? await supabase
+        .from('catalog_items')
+        .select('id, description, images, baskets(name, category, sale_price)')
+        .eq('user_id', userId)
+        .in('id', idList)
+        .order('created_at', { ascending: false })
+    : await supabase
+        .from('catalog_items')
+        .select('id, description, images, baskets(name, category, sale_price)')
+        .eq('user_id', userId)
+        .eq('visible', true)
+        .order('created_at', { ascending: false })
 
   if (error) return notFound()
 

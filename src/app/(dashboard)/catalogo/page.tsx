@@ -42,6 +42,8 @@ export default function CatalogoPage() {
   const [userId, setUserId] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [sharingWhatsapp, setSharingWhatsapp] = useState<string | null>(null)
+  const [shareSelectorOpen, setShareSelectorOpen] = useState(false)
+  const [selectedForShare, setSelectedForShare] = useState<Set<string>>(new Set())
   const [photoItem, setPhotoItem] = useState<CatalogItem | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -109,10 +111,39 @@ export default function CatalogoPage() {
     setDeleting(null)
   }
 
-  function copyLink() {
+  function openShareSelector() {
     if (!userId) return
-    navigator.clipboard.writeText(`${window.location.origin}/p/${userId}`)
+    setSelectedForShare(new Set(items.map(i => i.id)))
+    setShareSelectorOpen(true)
+  }
+
+  function toggleShareItem(id: string) {
+    setSelectedForShare(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleShareAll() {
+    if (selectedForShare.size === items.length) {
+      setSelectedForShare(new Set())
+    } else {
+      setSelectedForShare(new Set(items.map(i => i.id)))
+    }
+  }
+
+  function generateShareLink() {
+    const selected = Array.from(selectedForShare)
+    if (selected.length === 0) { toast.error('Selecione ao menos uma cesta'); return }
+    const base = `${window.location.origin}/p/${userId}`
+    const url = selected.length === items.length
+      ? base
+      : `${base}?ids=${selected.join(',')}`
+    navigator.clipboard.writeText(url)
     toast.success('Link copiado! Compartilhe com seus clientes.')
+    setShareSelectorOpen(false)
   }
 
   async function shareBasketOnWhatsapp(item: CatalogItem) {
@@ -223,7 +254,7 @@ export default function CatalogoPage() {
           <p className="text-muted-foreground">Gerencie e compartilhe suas cestas</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={copyLink} disabled={!userId}>
+          <Button variant="outline" onClick={openShareSelector} disabled={!userId || items.length === 0}>
             <Share2 className="h-4 w-4 mr-2" />
             Compartilhar Link
           </Button>
@@ -355,6 +386,57 @@ export default function CatalogoPage() {
           </div>
         </>
       )}
+
+      {/* ── Share selector ───────────────────────────────────────────────────── */}
+      <Dialog open={shareSelectorOpen} onOpenChange={setShareSelectorOpen}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Selecionar cestas para compartilhar</DialogTitle>
+            <DialogDescription>
+              Apenas as cestas selecionadas aparecerão no link público.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+            <label className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-gray-50 cursor-pointer border-b border-gray-100">
+              <input
+                type="checkbox"
+                checked={selectedForShare.size === items.length && items.length > 0}
+                onChange={toggleShareAll}
+                className="h-4 w-4 accent-amber-600"
+              />
+              <span className="font-medium text-sm flex-1">Selecionar todas</span>
+              <span className="text-xs text-muted-foreground">{selectedForShare.size}/{items.length}</span>
+            </label>
+
+            {items.map(item => (
+              <label key={item.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedForShare.has(item.id)}
+                  onChange={() => toggleShareItem(item.id)}
+                  className="h-4 w-4 accent-amber-600"
+                />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{item.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{formatCurrency(item.price)}</span>
+                </div>
+                {!item.visible && (
+                  <span className="text-xs text-muted-foreground italic">oculta</span>
+                )}
+              </label>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <Button onClick={generateShareLink} disabled={selectedForShare.size === 0}>
+              <Share2 className="h-4 w-4 mr-2" />
+              Gerar link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Photo management ──────────────────────────────────────────────────── */}
       <input
