@@ -154,7 +154,7 @@ export default function CouponsSection() {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Tipo de desconto *</Label>
-            <Select value={discountType} onValueChange={(v: 'percent' | 'fixed') => { if (v) setDiscountType(v) }}>
+            <Select value={discountType} onValueChange={(v: string) => { if (v === 'percent' || v === 'fixed') setDiscountType(v) }}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="percent">Percentual (%)</SelectItem>
