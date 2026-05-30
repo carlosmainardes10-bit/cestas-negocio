@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       break
     }
 
+    case 'customer.subscription.created':
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription
       const userId = sub.metadata?.supabase_user_id
@@ -112,6 +113,9 @@ export async function POST(req: NextRequest) {
       }
       break
     }
+
+    default:
+      break
   }
 
   return NextResponse.json({ received: true })
