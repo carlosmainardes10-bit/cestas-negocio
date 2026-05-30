@@ -161,26 +161,18 @@ export default function CatalogoPage() {
     setSharingWhatsapp(item.id)
     setQuantityDialogItem(null)
 
-    const supabase = createClient()
-    const { data: rawItems } = await supabase
-      .from('basket_items')
-      .select('quantity, products!basket_items_product_id_fkey(name)')
-      .eq('basket_id', item.basket_id)
-
-    type ProductRow = { name: string }
-    type ItemRow = { quantity: number; products: ProductRow | ProductRow[] | null }
-    const basketItems = (rawItems ?? []) as ItemRow[]
+    const res = await fetch(`/api/baskets/${item.basket_id}/items`)
+    type FetchedItem = { quantity: number; name: string }
+    const fetchedItems: FetchedItem[] = res.ok ? (await res.json()).items ?? [] : []
 
     let message = `🧺 ${item.name} — ${formatCurrency(item.price)}\n`
     if (item.priceFor2) {
       message += `Para 2 pessoas: ${formatCurrency(item.priceFor2)}\n`
     }
 
-    const productLines = basketItems.flatMap(bi => {
-      const p = Array.isArray(bi.products) ? bi.products[0] : bi.products
-      if (!p) return []
-      return [includeQuantities && bi.quantity > 1 ? `- ${bi.quantity}x ${p.name}` : `- ${p.name}`]
-    })
+    const productLines = fetchedItems.map(bi =>
+      includeQuantities && bi.quantity > 1 ? `- ${bi.quantity}x ${bi.name}` : `- ${bi.name}`
+    )
 
     if (productLines.length > 0) {
       message += `\nProdutos:\n${productLines.join('\n')}\n`

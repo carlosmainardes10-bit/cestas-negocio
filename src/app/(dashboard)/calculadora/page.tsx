@@ -132,6 +132,10 @@ export default function CalculadoraPage() {
 
   async function saveToCatalog() {
     if (!result || !category) return
+    if (result.items.length === 0) {
+      toast.error('Adicione pelo menos 1 produto antes de salvar a cesta.')
+      return
+    }
     setSaving(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -144,12 +148,15 @@ export default function CalculadoraPage() {
 
     if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
 
-    if (result.items.length > 0) {
-      const { error: itemsError } = await supabase.from('basket_items').insert(
-        result.items.map(item => ({ basket_id: basket.id, product_id: item.product.id, quantity: item.quantity }))
-      )
-      if (itemsError) console.error('basket_items insert error:', itemsError)
-    }
+    const itemsRes = await fetch('/api/baskets/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        basket_id: basket.id,
+        items: result.items.map(i => ({ product_id: i.product.id, quantity: i.quantity })),
+      }),
+    })
+    if (!itemsRes.ok) console.error('basket_items save error:', await itemsRes.text())
 
     const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
     if (parsedPriceFor2 && parsedPriceFor2 > 0) {
