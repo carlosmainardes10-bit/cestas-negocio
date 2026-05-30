@@ -18,13 +18,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { active } = await req.json()
 
   const supabase = createAdminClient()
-  const { data: coupon, error: fetchError } = await supabase
+  const { data, error: fetchError } = await supabase
     .from('coupons')
     .select('stripe_promotion_code_id')
     .eq('id', id)
     .single()
 
-  if (fetchError || !coupon) return NextResponse.json({ error: 'Cupom não encontrado' }, { status: 404 })
+  if (fetchError || !data) return NextResponse.json({ error: 'Cupom não encontrado' }, { status: 404 })
+
+  const coupon = data as { stripe_promotion_code_id: string }
 
   try {
     await stripe.promotionCodes.update(coupon.stripe_promotion_code_id, { active })
