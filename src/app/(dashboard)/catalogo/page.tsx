@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookImage, Share2, Eye, EyeOff, Plus, Trash2, Camera, X, ImagePlus, MessageCircle } from 'lucide-react'
+import { BookImage, Share2, Eye, EyeOff, Plus, Trash2, Camera, X, ImagePlus, MessageCircle, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -48,10 +48,25 @@ export default function CatalogoPage() {
   const [selectedForShare, setSelectedForShare] = useState<Set<string>>(new Set())
   const [photoItem, setPhotoItem] = useState<CatalogItem | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [detailItem, setDetailItem] = useState<CatalogItem | null>(null)
+  const [detailProducts, setDetailProducts] = useState<{ quantity: number; name: string }[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => { loadItems() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function openDetail(item: CatalogItem) {
+    setDetailItem(item)
+    setDetailProducts([])
+    setDetailLoading(true)
+    const res = await fetch(`/api/baskets/${item.basket_id}/items`)
+    if (res.ok) {
+      const data = await res.json()
+      setDetailProducts(data.items ?? [])
+    }
+    setDetailLoading(false)
+  }
 
   async function loadItems() {
     try {
@@ -161,9 +176,21 @@ export default function CatalogoPage() {
     setSharingWhatsapp(item.id)
     setQuantityDialogItem(null)
 
+    console.log('[WhatsApp] basket_id:', item.basket_id)
+
     const res = await fetch(`/api/baskets/${item.basket_id}/items`)
+    const rawBody = await res.text()
+    console.log('[WhatsApp] API status:', res.status, 'body:', rawBody)
+
     type FetchedItem = { quantity: number; name: string }
-    const fetchedItems: FetchedItem[] = res.ok ? (await res.json()).items ?? [] : []
+    let fetchedItems: FetchedItem[] = []
+    try {
+      const parsed = JSON.parse(rawBody)
+      fetchedItems = parsed.items ?? []
+    } catch {
+      console.error('[WhatsApp] JSON parse error')
+    }
+    console.log('[WhatsApp] fetchedItems:', fetchedItems)
 
     let message = `🧺 ${item.name} — ${formatCurrency(item.price)}\n`
     if (item.priceFor2) {
@@ -300,47 +327,55 @@ export default function CatalogoPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {items.map((item) => (
               <Card key={item.id} className={`overflow-hidden ${!item.visible ? 'opacity-60' : ''}`}>
-                <div className="relative h-40 bg-gradient-to-br from-amber-100 to-orange-100 overflow-hidden">
-                  {item.images.length > 0 ? (
-                    <img
-                      src={item.images[0]}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <BookImage className="h-12 w-12 text-amber-400" />
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setPhotoItem(item)}
-                    className="absolute bottom-2 right-2 bg-white/80 hover:bg-white text-gray-700 rounded-full p-1.5 shadow-sm transition-colors"
-                    title="Gerenciar fotos"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                  </button>
-                  {item.images.length > 1 && (
-                    <span className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded-full">
-                      {item.images.length} fotos
-                    </span>
-                  )}
-                </div>
-
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between mb-1">
-                    <h3 className="font-semibold">{item.name}</h3>
-                    <Badge variant="secondary" className="text-xs">
-                      {CATEGORY_LABELS[item.category] ?? item.category}
-                    </Badge>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => openDetail(item)}
+                >
+                  <div className="relative h-40 bg-gradient-to-br from-amber-100 to-orange-100 overflow-hidden">
+                    {item.images.length > 0 ? (
+                      <img
+                        src={item.images[0]}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <BookImage className="h-12 w-12 text-amber-400" />
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPhotoItem(item) }}
+                      className="absolute bottom-2 right-2 bg-white/80 hover:bg-white text-gray-700 rounded-full p-1.5 shadow-sm transition-colors"
+                      title="Gerenciar fotos"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                    </button>
+                    {item.images.length > 1 && (
+                      <span className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded-full">
+                        {item.images.length} fotos
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">{item.description || 'Sem descrição'}</p>
-                  <div className="flex items-center justify-between">
+
+                  <CardContent className="pt-4 pb-2">
+                    <div className="flex items-start justify-between mb-1">
+                      <h3 className="font-semibold">{item.name}</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {CATEGORY_LABELS[item.category] ?? item.category}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">{item.description || 'Sem descrição'}</p>
                     <div>
                       <span className="text-lg font-bold text-amber-700">{formatCurrency(item.price)}</span>
                       {item.priceFor2 && (
                         <p className="text-xs text-muted-foreground">2 pessoas: {formatCurrency(item.priceFor2)}</p>
                       )}
                     </div>
+                  </CardContent>
+                </div>
+
+                <CardContent className="pt-0 pb-3">
+                  <div className="flex items-center justify-end">
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -351,6 +386,16 @@ export default function CatalogoPage() {
                         {item.visible
                           ? <><Eye className="h-4 w-4 mr-1" />Visível</>
                           : <><EyeOff className="h-4 w-4 mr-1" />Oculto</>}
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => router.push(`/calculadora?edit=${item.basket_id}`)}
+                        className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                        title="Editar cesta"
+                      >
+                        <Pencil className="h-4 w-4" />
                       </Button>
 
                       <Button
@@ -494,6 +539,42 @@ export default function CatalogoPage() {
           e.target.value = ''
         }}
       />
+
+      {/* ── Detail dialog ────────────────────────────────────────────────────── */}
+      <Dialog open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
+        <DialogContent showCloseButton>
+          <DialogHeader>
+            <DialogTitle>{detailItem?.name}</DialogTitle>
+            <DialogDescription>
+              {detailItem ? CATEGORY_LABELS[detailItem.category] ?? detailItem.category : ''}{' '}
+              {detailItem && <>• {formatCurrency(detailItem.price)}</>}
+              {detailItem?.priceFor2 && <> • 2 pessoas: {formatCurrency(detailItem.priceFor2)}</>}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailItem?.description && (
+            <p className="text-sm text-muted-foreground -mt-1">{detailItem.description}</p>
+          )}
+
+          <div>
+            <p className="text-sm font-medium mb-2">Produtos da cesta</p>
+            {detailLoading ? (
+              <p className="text-sm text-muted-foreground animate-pulse">Carregando produtos...</p>
+            ) : detailProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum produto registrado.</p>
+            ) : (
+              <ul className="space-y-1">
+                {detailProducts.map((p, i) => (
+                  <li key={i} className="text-sm flex gap-2">
+                    <span className="text-muted-foreground w-6 text-right">{p.quantity}x</span>
+                    <span>{p.name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!photoItem} onOpenChange={(open) => !open && setPhotoItem(null)}>
         <DialogContent showCloseButton>

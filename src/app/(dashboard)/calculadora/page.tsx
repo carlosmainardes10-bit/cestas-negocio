@@ -16,6 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 
 type BasketCategory = 'romantica' | 'premium' | 'fitness' | 'corporativa' | 'economica'
 
@@ -64,19 +67,20 @@ export default function CalculadoraPage() {
   const [dbProducts, setDbProducts] = useState<Product[]>([])
   const [basketItems, setBasketItems] = useState<BasketEntry[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
-  const [isFor2, setIsFor2] = useState(false)
   const [result, setResult] = useState<{
     totalCost: number; profit: number; margin: number
     suggestedPrice: number; basketName: string; salePrice: number
     items: BasketEntry[]
-    totalCostFor2: number; suggestedPriceFor2: number
   } | null>(null)
   const [category, setCategory] = useState<BasketCategory | null>(null)
   const [description, setDescription] = useState('')
   const [priceFor2, setPriceFor2] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editBasketId, setEditBasketId] = useState<string | null>(null)
+  const [editCatalogItemId, setEditCatalogItemId] = useState<string | null>(null)
+  const [confirmZeroCostsOpen, setConfirmZeroCostsOpen] = useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, formState: { errors }, reset, getValues } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { basketName: '', salePrice: 0, laborCost: 0, packagingCost: 0, marketingCost: 0 },
   })
@@ -87,7 +91,59 @@ export default function CalculadoraPage() {
       .select('*')
       .order('category').order('name')
       .then(({ data }) => { if (data) setDbProducts(data as Product[]) })
-  }, [])
+
+    const params = new URLSearchParams(window.location.search)
+    const editId = params.get('edit')
+    if (editId) {
+      setEditBasketId(editId)
+      loadForEdit(editId)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadForEdit(basketId: string) {
+    const res = await fetch(`/api/baskets/${basketId}`)
+    if (!res.ok) { toast.error('Erro ao carregar cesta para edição'); return }
+    const data = await res.json()
+
+    reset({
+      basketName: data.name,
+      salePrice: data.sale_price,
+      laborCost: 0,
+      packagingCost: 0,
+      marketingCost: 0,
+    })
+    setCategory(data.category as BasketCategory)
+    setDescription(data.description ?? '')
+    setPriceFor2(data.sale_price_for_2 ? String(data.sale_price_for_2) : '')
+    setEditCatalogItemId(data.catalog_item_id)
+
+    const loadedItems: BasketEntry[] = (data.items as {
+      product_id: string; quantity: number; name: string; cost: number; unit: string; product_category: string
+    }[]).map(item => ({
+      product: {
+        id: item.product_id,
+        name: item.name,
+        cost: item.cost,
+        unit: item.unit,
+        category: item.product_category,
+        user_id: '',
+        created_at: '',
+      } as Product,
+      quantity: item.quantity,
+    }))
+    setBasketItems(loadedItems)
+
+    const productsCost = loadedItems.reduce((sum, i) => sum + i.product.cost * i.quantity, 0)
+    setResult({
+      totalCost: productsCost,
+      profit: data.sale_price - productsCost,
+      margin: data.sale_price > 0 ? ((data.sale_price - productsCost) / data.sale_price) * 100 : 0,
+      suggestedPrice: productsCost > 0 ? productsCost / 0.6 : data.sale_price,
+      basketName: data.name,
+      salePrice: data.sale_price,
+      items: loadedItems,
+    })
+  }
 
   function addProduct(product: Product) {
     setBasketItems(prev => {
@@ -115,19 +171,94 @@ export default function CalculadoraPage() {
     }
     const productsCost = basketItems.reduce((sum, item) => sum + item.product.cost * item.quantity, 0)
     const totalCost = productsCost + data.laborCost + data.packagingCost + data.marketingCost
-    const totalCostFor2 = productsCost * 2 + data.laborCost + data.packagingCost + data.marketingCost
     const profit = data.salePrice - totalCost
     const margin = data.salePrice > 0 ? (profit / data.salePrice) * 100 : 0
     const suggestedPrice = totalCost / 0.6
-    const suggestedPriceFor2 = totalCostFor2 / 0.6
     setResult({
       totalCost, profit, margin, suggestedPrice,
       basketName: data.basketName, salePrice: data.salePrice, items: basketItems,
-      totalCostFor2, suggestedPriceFor2,
     })
-    setCategory(null)
-    setDescription('')
-    setPriceFor2('')
+    if (!editBasketId) {
+      setCategory(null)
+      setDescription('')
+      setPriceFor2('')
+    }
+  }
+
+  async function doActualSave() {
+    if (!result || !category) return
+    setSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+
+    if (editBasketId) {
+      const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
+      const { error: basketError } = await supabase
+        .from('baskets')
+        .update({
+          name: result.basketName,
+          category,
+          sale_price: result.salePrice,
+          sale_price_for_2: parsedPriceFor2 && parsedPriceFor2 > 0 ? parsedPriceFor2 : null,
+        })
+        .eq('id', editBasketId)
+
+      if (basketError) { toast.error('Erro ao atualizar cesta'); setSaving(false); return }
+
+      const deleteRes = await fetch(`/api/baskets/${editBasketId}/items`, { method: 'DELETE' })
+      if (!deleteRes.ok) console.error('basket_items delete error:', await deleteRes.text())
+
+      const itemsRes = await fetch('/api/baskets/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          basket_id: editBasketId,
+          items: result.items.map(i => ({ product_id: i.product.id, quantity: i.quantity })),
+        }),
+      })
+      if (!itemsRes.ok) console.error('basket_items insert error:', await itemsRes.text())
+
+      if (editCatalogItemId) {
+        await supabase.from('catalog_items').update({ description }).eq('id', editCatalogItemId)
+      }
+
+      toast.success('Cesta atualizada no catálogo!')
+      setSaving(false)
+      router.push('/catalogo')
+    } else {
+      const { data: basket, error: basketError } = await supabase
+        .from('baskets')
+        .insert({ user_id: user.id, name: result.basketName, category, sale_price: result.salePrice })
+        .select('id').single()
+
+      if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
+
+      const itemsRes = await fetch('/api/baskets/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          basket_id: basket.id,
+          items: result.items.map(i => ({ product_id: i.product.id, quantity: i.quantity })),
+        }),
+      })
+      if (!itemsRes.ok) console.error('basket_items save error:', await itemsRes.text())
+
+      const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
+      if (parsedPriceFor2 && parsedPriceFor2 > 0) {
+        await supabase.from('baskets').update({ sale_price_for_2: parsedPriceFor2 }).eq('id', basket.id)
+      }
+
+      const { error: catalogError } = await supabase
+        .from('catalog_items')
+        .insert({ user_id: user.id, basket_id: basket.id, description, visible: true })
+
+      if (catalogError) { toast.error('Erro ao adicionar ao catálogo'); setSaving(false); return }
+
+      toast.success('Cesta cadastrada no catálogo!')
+      setSaving(false)
+      router.push('/catalogo')
+    }
   }
 
   async function saveToCatalog() {
@@ -136,42 +267,18 @@ export default function CalculadoraPage() {
       toast.error('Adicione pelo menos 1 produto antes de salvar a cesta.')
       return
     }
-    setSaving(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSaving(false); return }
 
-    const { data: basket, error: basketError } = await supabase
-      .from('baskets')
-      .insert({ user_id: user.id, name: result.basketName, category, sale_price: result.salePrice })
-      .select('id').single()
-
-    if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
-
-    const itemsRes = await fetch('/api/baskets/items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        basket_id: basket.id,
-        items: result.items.map(i => ({ product_id: i.product.id, quantity: i.quantity })),
-      }),
-    })
-    if (!itemsRes.ok) console.error('basket_items save error:', await itemsRes.text())
-
-    const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
-    if (parsedPriceFor2 && parsedPriceFor2 > 0) {
-      await supabase.from('baskets').update({ sale_price_for_2: parsedPriceFor2 }).eq('id', basket.id)
+    if (editBasketId) {
+      const laborVal = getValues('laborCost') || 0
+      const packagingVal = getValues('packagingCost') || 0
+      const marketingVal = getValues('marketingCost') || 0
+      if (laborVal === 0 && packagingVal === 0 && marketingVal === 0) {
+        setConfirmZeroCostsOpen(true)
+        return
+      }
     }
 
-    const { error: catalogError } = await supabase
-      .from('catalog_items')
-      .insert({ user_id: user.id, basket_id: basket.id, description, visible: true })
-
-    if (catalogError) { toast.error('Erro ao adicionar ao catálogo'); setSaving(false); return }
-
-    toast.success('Cesta cadastrada no catálogo!')
-    setSaving(false)
-    router.push('/catalogo')
+    await doActualSave()
   }
 
   const groupedProducts = Object.entries(PRODUCT_CATEGORIES)
@@ -186,6 +293,12 @@ export default function CalculadoraPage() {
         <h1 className="text-2xl font-bold">Calculadora de Lucro</h1>
         <p className="text-muted-foreground">Saiba exatamente quanto você lucra em cada cesta</p>
       </div>
+
+      {editBasketId && result && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          Editando: <strong>{result.basketName}</strong>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <Card>
@@ -319,26 +432,6 @@ export default function CalculadoraPage() {
                   </div>
                 </div>
               )}
-
-              {/* Toggle: cesta para 2 pessoas */}
-              <label className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer border transition-colors ${
-                isFor2 ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-amber-300'
-              }`}>
-                <input
-                  type="checkbox"
-                  checked={isFor2}
-                  onChange={(e) => setIsFor2(e.target.checked)}
-                  className="h-4 w-4 accent-amber-600"
-                />
-                <div>
-                  <span className="text-sm font-medium">Cesta para 2 pessoas</span>
-                  {isFor2 && basketItems.length > 0 && (
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      Custo dobrado: {formatCurrency(productsCost * 2)}
-                    </p>
-                  )}
-                </div>
-              </label>
             </CardContent>
           </Card>
         </div>
@@ -404,33 +497,19 @@ export default function CalculadoraPage() {
             </CardContent>
           </Card>
 
-          {isFor2 && (
-            <Card className="border-2 border-blue-200 bg-blue-50">
-              <CardHeader><CardTitle className="text-base">Para 2 pessoas</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Custo total</span>
-                  <span className="font-medium">{formatCurrency(result.totalCostFor2)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Preço sugerido (40% margem)</span>
-                  <span className="font-semibold text-blue-700">{formatCurrency(result.suggestedPriceFor2)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
                 <BookImage className="h-4 w-4 text-amber-600" />
-                <CardTitle className="text-base">Cadastrar no catálogo?</CardTitle>
+                <CardTitle className="text-base">
+                  {editBasketId ? 'Atualizar no catálogo' : 'Cadastrar no catálogo?'}
+                </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
                 <Label>Categoria</Label>
-                <Select onValueChange={(val) => val && setCategory(val as BasketCategory)}>
+                <Select value={category ?? undefined} onValueChange={(val) => val && setCategory(val as BasketCategory)}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
@@ -449,25 +528,50 @@ export default function CalculadoraPage() {
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
-              {isFor2 && (
-                <div className="space-y-1">
-                  <Label>Preço para 2 pessoas (R$) <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder={`Sugerido: ${formatCurrency(result.suggestedPriceFor2)}`}
-                    value={priceFor2}
-                    onChange={(e) => setPriceFor2(e.target.value)}
-                  />
-                </div>
-              )}
+              <div className="space-y-1">
+                <Label>Preço para 2 pessoas (R$) <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={priceFor2}
+                  onChange={(e) => setPriceFor2(e.target.value)}
+                />
+              </div>
               <Button className="w-full" onClick={saveToCatalog} disabled={!category || saving}>
-                {saving ? 'Salvando...' : 'Salvar no catálogo'}
+                {saving ? 'Salvando...' : editBasketId ? 'Atualizar cesta' : 'Salvar no catálogo'}
               </Button>
             </CardContent>
           </Card>
         </div>
       )}
+
+      {/* ── Confirm zero costs (edit mode only) ─────────────────────────────── */}
+      <Dialog open={confirmZeroCostsOpen} onOpenChange={setConfirmZeroCostsOpen}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Custos zerados</DialogTitle>
+            <DialogDescription>
+              Os campos Embalagem, Mão de obra e Marketing estão zerados. Deseja salvar assim mesmo?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => setConfirmZeroCostsOpen(false)}
+            >
+              Preencher
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => { setConfirmZeroCostsOpen(false); doActualSave() }}
+            >
+              Salvar assim mesmo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
