@@ -164,10 +164,11 @@ export default function CatalogoPage() {
     const supabase = createClient()
     const { data: rawItems } = await supabase
       .from('basket_items')
-      .select('quantity, products(name)')
+      .select('quantity, products!basket_items_product_id_fkey(name)')
       .eq('basket_id', item.basket_id)
 
-    type ItemRow = { quantity: number; products: { name: string } | null }
+    type ProductRow = { name: string }
+    type ItemRow = { quantity: number; products: ProductRow | ProductRow[] | null }
     const basketItems = (rawItems ?? []) as ItemRow[]
 
     let message = `🧺 ${item.name} — ${formatCurrency(item.price)}\n`
@@ -175,12 +176,11 @@ export default function CatalogoPage() {
       message += `Para 2 pessoas: ${formatCurrency(item.priceFor2)}\n`
     }
 
-    const productLines = basketItems
-      .filter(bi => bi.products)
-      .map(bi => includeQuantities && bi.quantity > 1
-        ? `• ${bi.quantity}x ${bi.products!.name}`
-        : `• ${bi.products!.name}`
-      )
+    const productLines = basketItems.flatMap(bi => {
+      const p = Array.isArray(bi.products) ? bi.products[0] : bi.products
+      if (!p) return []
+      return [includeQuantities && bi.quantity > 1 ? `- ${bi.quantity}x ${p.name}` : `- ${p.name}`]
+    })
 
     if (productLines.length > 0) {
       message += `\nProdutos:\n${productLines.join('\n')}\n`
