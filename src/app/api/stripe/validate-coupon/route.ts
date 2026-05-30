@@ -18,9 +18,10 @@ export async function GET(req: NextRequest) {
     }
 
     const promoCode = promoCodes.data[0]
-    const couponId = typeof (promoCode as any).coupon === 'string'
-      ? (promoCode as any).coupon
-      : (promoCode as any).coupon?.id
+    // Na API 2026-04-22.dahlia, coupon fica em promoCode.promotion.coupon
+    const promotionCoupon = promoCode.promotion?.coupon
+    const couponId = typeof promotionCoupon === 'string' ? promotionCoupon : (promotionCoupon as { id: string } | null)?.id
+    if (!couponId) return NextResponse.json({ valid: false, error: 'Cupom inválido' })
     const stripeCoupon = await stripe.coupons.retrieve(couponId)
 
     const discountType = stripeCoupon.percent_off != null ? 'percent' : 'fixed'
