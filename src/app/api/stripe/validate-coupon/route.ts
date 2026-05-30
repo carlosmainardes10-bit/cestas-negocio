@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
     const discountValue = stripeCoupon.percent_off ?? (stripeCoupon.amount_off ? stripeCoupon.amount_off / 100 : 0)
 
     const supabase = createAdminClient()
-    const { data: coupon } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: couponRow } = await (supabase as any)
       .from('coupons')
       .select('applicable_plans')
       .eq('stripe_promotion_code_id', promoCode.id)
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
       promotion_code_id: promoCode.id,
       discount_type: discountType,
       discount_value: discountValue,
-      applicable_plans: coupon?.applicable_plans ?? ['basic', 'premium'],
+      applicable_plans: couponRow?.applicable_plans ?? ['basic', 'premium'],
     })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
