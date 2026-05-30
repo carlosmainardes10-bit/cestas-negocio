@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     await stripe.promotionCodes.update(coupon.stripe_promotion_code_id, { active })
-    await supabase.from('coupons').update({ active }).eq('id', id)
+    await (supabase.from('coupons') as any).update({ active }).eq('id', id)
     return NextResponse.json({ ok: true })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
