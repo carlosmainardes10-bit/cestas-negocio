@@ -15,7 +15,8 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const supabase = createAdminClient()
-  const { data: coupons, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: coupons, error } = await (supabase as any)
     .from('coupons')
     .select('*, coupon_usages(user_email, redeemed_at)')
     .order('created_at', { ascending: false })
@@ -54,7 +55,8 @@ export async function POST(req: NextRequest) {
     const stripePromoCode = await stripe.promotionCodes.create(promoCodeData as any)
 
     const supabase = createAdminClient()
-    const { data: coupon, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: coupon, error } = await (supabase as any)
       .from('coupons')
       .insert({
         stripe_coupon_id: stripeCoupon.id,

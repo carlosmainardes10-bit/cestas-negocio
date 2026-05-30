@@ -37,7 +37,9 @@ export async function POST(req: NextRequest) {
 
       const promotionCodeId = session.metadata?.promotion_code_id
       if (promotionCodeId) {
-        const { data: coupon } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sb = supabase as any
+        const { data: coupon } = await sb
           .from('coupons')
           .select('id')
           .eq('stripe_promotion_code_id', promotionCodeId)
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
             .eq('id', userId)
             .maybeSingle()
           if (userData?.email) {
-            await supabase.from('coupon_usages').insert({
+            await sb.from('coupon_usages').insert({
               coupon_id: coupon.id,
               user_email: userData.email,
             }).then(() => {})
