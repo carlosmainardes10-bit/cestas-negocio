@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Crown, Check, Zap, Clock, Mail } from 'lucide-react'
+import { Crown, Check, Zap, Clock, Mail, Tag, X } from 'lucide-react'
 
 type Profile = {
   plan: 'basic' | 'premium'
@@ -41,6 +41,16 @@ export default function AssinaturaPage() {
   const [userEmail, setUserEmail] = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [couponInput, setCouponInput] = useState('')
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string
+    promotion_code_id: string
+    discount_type: 'percent' | 'fixed'
+    discount_value: number
+    applicable_plans: string[]
+  } | null>(null)
+  const [couponError, setCouponError] = useState('')
 
   useEffect(() => {
     if (searchParams.get('success') === '1') toast.success('Assinatura confirmada! Bem-vinda ao Premium 🎉')
@@ -80,13 +90,51 @@ export default function AssinaturaPage() {
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }
   }, [])
 
+  async function applyCoupon() {
+    if (!couponInput.trim()) return
+    setCouponLoading(true)
+    setCouponError('')
+    try {
+      const res = await fetch(`/api/stripe/validate-coupon?code=${encodeURIComponent(couponInput.trim())}`)
+      const data = await res.json()
+      if (!res.ok || !data.valid) {
+        setCouponError(data.error ?? 'Cupom inválido')
+        setAppliedCoupon(null)
+      } else {
+        setAppliedCoupon(data)
+        setCouponError('')
+      }
+    } catch {
+      setCouponError('Erro ao validar cupom')
+    }
+    setCouponLoading(false)
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null)
+    setCouponInput('')
+    setCouponError('')
+  }
+
+  function discountedPrice(planKey: 'basic' | 'premium') {
+    if (!appliedCoupon) return null
+    const price = PLANS[planKey].price / 100
+    if (appliedCoupon.discount_type === 'percent') {
+      return price * (1 - appliedCoupon.discount_value / 100)
+    }
+    return Math.max(0, price - appliedCoupon.discount_value)
+  }
+
   async function startCheckout(plan: 'basic' | 'premium') {
     setLoading(true)
     try {
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({
+          plan,
+          ...(appliedCoupon ? { promotionCodeId: appliedCoupon.promotion_code_id } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -226,6 +274,52 @@ export default function AssinaturaPage() {
         </div>
       )}
 
+      {/* Coupon input */}
+      {!isPremiumActive && !isBasicActive && (
+        <div className="mb-6">
+          {appliedCoupon ? (
+            <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+              <Tag className="h-4 w-4 text-green-600 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-green-800 font-medium">
+                  Cupom <code className="font-mono">{appliedCoupon.code}</code> aplicado —{' '}
+                  {appliedCoupon.discount_type === 'percent'
+                    ? `${appliedCoupon.discount_value}% de desconto`
+                    : `R$ ${appliedCoupon.discount_value.toFixed(2)} de desconto`}
+                </p>
+              </div>
+              <button onClick={removeCoupon} className="text-green-600 hover:text-green-800 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                Tenho um cupom
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
+                  onKeyDown={e => e.key === 'Enter' && applyCoupon()}
+                  placeholder="Digite o código do cupom"
+                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring uppercase"
+                />
+                <button
+                  onClick={applyCoupon}
+                  disabled={couponLoading || !couponInput.trim()}
+                  className="h-9 px-4 text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                >
+                  {couponLoading ? '...' : 'Aplicar'}
+                </button>
+              </div>
+              {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Plans */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Basic */}
@@ -234,7 +328,17 @@ export default function AssinaturaPage() {
             <div>
               <h2 className="font-semibold text-lg">{PLANS.basic.name}</h2>
               <p className="text-2xl font-bold mt-1">
-                R$ {(PLANS.basic.price / 100).toFixed(0).replace('.', ',')}
+                {appliedCoupon && discountedPrice('basic') === 0
+                  ? <span className="text-green-600">Gratuito</span>
+                  : appliedCoupon
+                    ? <>
+                        <span className="line-through text-muted-foreground text-lg mr-1">
+                          R$ {(PLANS.basic.price / 100).toFixed(0)}
+                        </span>
+                        R$ {discountedPrice('basic')!.toFixed(2)}
+                      </>
+                    : <>R$ {(PLANS.basic.price / 100).toFixed(0).replace('.', ',')}</>
+                }
                 <span className="text-sm font-normal text-muted-foreground">/mês</span>
               </p>
             </div>
@@ -276,7 +380,17 @@ export default function AssinaturaPage() {
                 <Crown className="h-4 w-4 text-amber-600" />
               </div>
               <p className="text-2xl font-bold mt-1">
-                R$ {(PLANS.premium.price / 100).toFixed(0).replace('.', ',')}
+                {appliedCoupon && discountedPrice('premium') === 0
+                  ? <span className="text-green-600">Gratuito</span>
+                  : appliedCoupon
+                    ? <>
+                        <span className="line-through text-muted-foreground text-lg mr-1">
+                          R$ {(PLANS.premium.price / 100).toFixed(0)}
+                        </span>
+                        R$ {discountedPrice('premium')!.toFixed(2)}
+                      </>
+                    : <>R$ {(PLANS.premium.price / 100).toFixed(0).replace('.', ',')}</>
+                }
                 <span className="text-sm font-normal text-muted-foreground">/mês</span>
               </p>
             </div>

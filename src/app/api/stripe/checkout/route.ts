@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(req: NextRequest) {
   try {
-    const { plan } = await req.json()
+    const { plan, promotionCodeId } = await req.json()
 
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -40,19 +40,31 @@ export async function POST(req: NextRequest) {
     const priceId = PRICE_IDS[plan as keyof typeof PRICE_IDS]
     if (!priceId) return NextResponse.json({ error: 'Price ID não configurado' }, { status: 500 })
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        trial_period_days: 7,
-        metadata: { supabase_user_id: user.id, plan },
-      },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/assinatura?success=1`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/assinatura?canceled=1`,
-      metadata: { supabase_user_id: user.id, plan },
-    })
+      metadata: {
+        supabase_user_id: user.id,
+        plan,
+        ...(promotionCodeId ? { promotion_code_id: promotionCodeId } : {}),
+      },
+    }
+
+    if (promotionCodeId) {
+      sessionParams.discounts = [{ promotion_code: promotionCodeId }]
+      sessionParams.subscription_data = { metadata: { supabase_user_id: user.id, plan } }
+    } else {
+      sessionParams.subscription_data = {
+        trial_period_days: 7,
+        metadata: { supabase_user_id: user.id, plan },
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
 
     return NextResponse.json({ url: session.url })
   } catch (error) {

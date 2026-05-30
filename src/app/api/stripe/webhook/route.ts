@@ -34,6 +34,28 @@ export async function POST(req: NextRequest) {
         stripe_customer_id: session.customer as string,
         stripe_subscription_id: session.subscription as string,
       }).eq('id', userId)
+
+      const promotionCodeId = session.metadata?.promotion_code_id
+      if (promotionCodeId) {
+        const { data: coupon } = await supabase
+          .from('coupons')
+          .select('id')
+          .eq('stripe_promotion_code_id', promotionCodeId)
+          .maybeSingle()
+        if (coupon) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', userId)
+            .maybeSingle()
+          if (userData?.email) {
+            await supabase.from('coupon_usages').insert({
+              coupon_id: coupon.id,
+              user_email: userData.email,
+            }).then(() => {})
+          }
+        }
+      }
       break
     }
 

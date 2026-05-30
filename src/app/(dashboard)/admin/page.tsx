@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { Badge } from '@/components/ui/badge'
 import { Crown, Clock, UserX, TrendingUp } from 'lucide-react'
 import { PLANS } from '@/lib/plans'
+import CouponsSection from './CouponsSection'
 
 type UserRow = {
   id: string
@@ -102,6 +103,9 @@ export default async function AdminPage() {
           </p>
         </div>
       </div>
+
+      {/* Coupons */}
+      <CouponsSection />
 
       {/* Table */}
       <div className="rounded-xl border bg-white overflow-hidden">
