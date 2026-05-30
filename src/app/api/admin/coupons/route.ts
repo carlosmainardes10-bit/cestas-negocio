@@ -45,14 +45,12 @@ export async function POST(req: NextRequest) {
     const stripeCoupon = await stripe.coupons.create(couponData)
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const promoCodeData: Record<string, any> = {
-      coupon: stripeCoupon.id,
-      code,
-    }
-    if (max_redemptions) promoCodeData.max_redemptions = max_redemptions
-    if (redeem_by) promoCodeData.expires_at = Math.floor(new Date(redeem_by).getTime() / 1000)
+    const promoPayload: any = { coupon: stripeCoupon.id, code }
+    if (max_redemptions) promoPayload.max_redemptions = max_redemptions
+    if (redeem_by) promoPayload.expires_at = Math.floor(new Date(redeem_by).getTime() / 1000)
 
-    const stripePromoCode = await stripe.promotionCodes.create(promoCodeData as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stripePromoCode = await (stripe.promotionCodes.create as any)(promoPayload)
 
     const supabase = createAdminClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
