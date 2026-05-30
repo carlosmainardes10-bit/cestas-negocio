@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ coupon })
   } catch (error) {
+    console.error('[admin/coupons POST] Stripe error:', JSON.stringify(error, null, 2))
     const msg = error instanceof Error ? error.message : String(error)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
