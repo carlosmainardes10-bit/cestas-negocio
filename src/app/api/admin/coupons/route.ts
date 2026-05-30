@@ -49,13 +49,25 @@ export async function POST(req: NextRequest) {
     }
     const stripeCoupon = await stripe.coupons.create(couponData)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const promoPayload: any = { coupon: stripeCoupon.id, code }
-    if (max_redemptions) promoPayload.max_redemptions = max_redemptions
-    if (redeem_by) promoPayload.expires_at = Math.floor(new Date(redeem_by).getTime() / 1000)
+    // SDK da versão 2026-04-22.dahlia filtra 'coupon' por não estar nos tipos — usar fetch direto
+    const promoBody = new URLSearchParams({ coupon: stripeCoupon.id, code })
+    if (max_redemptions) promoBody.set('max_redemptions', String(max_redemptions))
+    if (redeem_by) promoBody.set('expires_at', String(Math.floor(new Date(redeem_by).getTime() / 1000)))
 
+    const promoRes = await fetch('https://api.stripe.com/v1/promotion_codes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Stripe-Version': '2026-04-22.dahlia',
+      },
+      body: promoBody.toString(),
+    })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripePromoCode = await (stripe.promotionCodes.create as any)(promoPayload)
+    const stripePromoCode = await promoRes.json() as any
+    if (!promoRes.ok) {
+      throw new Error(stripePromoCode.error?.message ?? 'Erro ao criar promotion code no Stripe')
+    }
 
     const supabase = createAdminClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
