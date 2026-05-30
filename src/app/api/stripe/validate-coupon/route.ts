@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
     }
 
     const promoCode = promoCodes.data[0]
-    const stripeCoupon = promoCode.coupon as { percent_off?: number | null; amount_off?: number | null }
+    const couponId = typeof (promoCode as any).coupon === 'string'
+      ? (promoCode as any).coupon
+      : (promoCode as any).coupon?.id
+    const stripeCoupon = await stripe.coupons.retrieve(couponId)
 
     const discountType = stripeCoupon.percent_off != null ? 'percent' : 'fixed'
     const discountValue = stripeCoupon.percent_off ?? (stripeCoupon.amount_off ? stripeCoupon.amount_off / 100 : 0)
