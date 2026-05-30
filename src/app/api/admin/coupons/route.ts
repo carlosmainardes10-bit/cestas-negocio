@@ -32,6 +32,11 @@ export async function POST(req: NextRequest) {
   const { code, discount_type, discount_value, applicable_plans, max_redemptions, redeem_by } = await req.json()
 
   try {
+    const existing = await stripe.promotionCodes.list({ code: code.toUpperCase().trim(), limit: 1 })
+    if (existing.data.length > 0) {
+      return NextResponse.json({ error: 'Código já existe no Stripe' }, { status: 400 })
+    }
+
     const couponData: Parameters<typeof stripe.coupons.create>[0] = {
       duration: 'forever',
       metadata: { applicable_plans: (applicable_plans as string[]).join(',') },
@@ -77,7 +82,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ coupon })
   } catch (error) {
     console.error('[admin/coupons POST] Stripe error:', JSON.stringify(error, null, 2))
-    const msg = error instanceof Error ? error.message : String(error)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msg = (error as any)?.raw?.message ?? (error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
