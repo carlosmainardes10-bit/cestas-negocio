@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetClose } from '@/components/ui/sheet'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription,
-  DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 
 const PRODUCT_CATEGORIES: { value: string; label: string }[] = [
@@ -27,9 +27,18 @@ const PRODUCT_CATEGORIES: { value: string; label: string }[] = [
   { value: 'bebidas', label: 'Bebidas' },
   { value: 'frutas', label: 'Frutas' },
   { value: 'salgados', label: 'Salgados' },
+  { value: 'charcutaria', label: 'Charcutaria' },
+  { value: 'bebidas_alcoolicas', label: 'Bebidas Alcoólicas' },
+  { value: 'mercearia', label: 'Mercearia' },
   { value: 'embalagem', label: 'Embalagem' },
   { value: 'outros', label: 'Outros' },
 ]
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  padaria: '🍞', laticinios: '🥛', doces: '🍫', bebidas: '☕', frutas: '🍎',
+  salgados: '🫓', charcutaria: '🥩', bebidas_alcoolicas: '🍷', mercearia: '🛒',
+  embalagem: '📦', outros: '✨',
+}
 
 const UNITS: { value: string; label: string }[] = [
   { value: 'un', label: 'Unidade' },
@@ -54,10 +63,6 @@ function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function categoryLabel(value: string) {
-  return PRODUCT_CATEGORIES.find(c => c.value === value)?.label ?? value
-}
-
 export default function ProdutosPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +72,9 @@ export default function ProdutosPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [category, setCategory] = useState('')
   const [unit, setUnit] = useState('un')
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
+  const [trashDropOver, setTrashDropOver] = useState(false)
+  const [pendingTrashProduct, setPendingTrashProduct] = useState<Product | null>(null)
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -159,6 +167,17 @@ export default function ProdutosPage() {
       toast.success('Produto apagado')
     }
     setDeleting(null)
+    setPendingTrashProduct(null)
+  }
+
+  async function moveProductToCategory(productId: string, newCategory: string) {
+    const supabase = createClient()
+    const { error } = await supabase.from('products').update({ category: newCategory }).eq('id', productId)
+    if (error) {
+      toast.error('Erro ao mover produto')
+    } else {
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, category: newCategory } : p))
+    }
   }
 
   const grouped = PRODUCT_CATEGORIES.map(cat => ({
@@ -172,8 +191,13 @@ export default function ProdutosPage() {
 
   if (loading) return <p className="text-muted-foreground text-sm p-8">Carregando...</p>
 
+  const allGroups = [
+    ...grouped,
+    ...(uncategorized.length > 0 ? [{ value: '__other', label: 'Sem categoria', items: uncategorized }] : []),
+  ]
+
   return (
-    <div>
+    <div className="pb-28">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">Produtos</h1>
@@ -212,62 +236,55 @@ export default function ProdutosPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {[...grouped, ...(uncategorized.length > 0 ? [{ value: 'outros', label: 'Outros', items: uncategorized }] : [])].map((group) => (
-            <div key={group.value}>
-              <div className="flex items-center gap-2 mb-2">
+          {allGroups.map((group) => (
+            <div
+              key={group.value}
+              onDragOver={(e) => { e.preventDefault(); setDragOverCategory(group.value) }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverCategory(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOverCategory(null)
+                const productId = e.dataTransfer.getData('productId')
+                if (productId && group.value !== '__other') moveProductToCategory(productId, group.value)
+              }}
+              className={`rounded-xl border-2 p-3 transition-colors ${
+                dragOverCategory === group.value
+                  ? 'border-amber-400 bg-amber-50'
+                  : 'border-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">{CATEGORY_EMOJI[group.value] ?? '•'}</span>
                 <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   {group.label}
                 </span>
                 <Badge variant="outline" className="text-xs">{group.items.length}</Badge>
               </div>
-              <div className="border rounded-lg divide-y">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {group.items.map((product) => (
-                  <div key={product.id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{product.name}</span>
-                        {product.brand && (
-                          <span className="text-xs text-muted-foreground">{product.brand}</span>
-                        )}
-                      </div>
-                      {product.store && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{product.store}</p>
-                      )}
+                  <div
+                    key={product.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('productId', product.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onDragEnd={() => { setDragOverCategory(null); setTrashDropOver(false) }}
+                    onClick={() => openEdit(product)}
+                    className="relative group bg-white border border-gray-200 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-amber-300 hover:shadow-sm transition-all select-none"
+                  >
+                    <div className="text-sm font-semibold text-gray-800 truncate">{product.name}</div>
+                    {product.brand && (
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">{product.brand}</div>
+                    )}
+                    <div className="text-xs text-amber-700 font-medium mt-1.5">
+                      {formatCurrency(product.cost)}
+                      <span className="text-muted-foreground font-normal">/{product.unit}</span>
                     </div>
-                    <div className="text-sm font-medium text-amber-700 whitespace-nowrap">
-                      {formatCurrency(product.cost)}<span className="text-xs text-muted-foreground font-normal">/{product.unit}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(product)}>
-                        <Pencil className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                      <Dialog>
-                        <DialogTrigger render={
-                          <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-600 hover:bg-red-50" />
-                        }>
-                          <Trash2 className="h-4 w-4" />
-                        </DialogTrigger>
-                        <DialogContent showCloseButton={false}>
-                          <DialogHeader>
-                            <DialogTitle>Apagar produto</DialogTitle>
-                            <DialogDescription>
-                              Tem certeza que deseja apagar <strong>{product.name}</strong>?
-                            </DialogDescription>
-                          </DialogHeader>
-                          <DialogFooter>
-                            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-                            <DialogClose render={
-                              <Button
-                                variant="destructive"
-                                disabled={deleting === product.id}
-                                onClick={() => deleteProduct(product.id)}
-                              />
-                            }>
-                              {deleting === product.id ? 'Apagando...' : 'Apagar'}
-                            </DialogClose>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
                     </div>
                   </div>
                 ))}
@@ -277,6 +294,58 @@ export default function ProdutosPage() {
         </div>
       )}
 
+      {/* ── Trash bin (fixed at bottom) ───────────────────────────────────────── */}
+      {products.length > 0 && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setTrashDropOver(true) }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setTrashDropOver(false)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            setTrashDropOver(false)
+            const productId = e.dataTransfer.getData('productId')
+            const product = products.find(p => p.id === productId)
+            if (product) setPendingTrashProduct(product)
+          }}
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-6 py-3 rounded-2xl border-2 shadow-lg transition-all ${
+            trashDropOver
+              ? 'border-red-500 bg-red-100 scale-110'
+              : 'border-gray-300 bg-white/90 backdrop-blur-sm'
+          }`}
+        >
+          <Trash2 className={`h-5 w-5 transition-colors ${trashDropOver ? 'text-red-600' : 'text-gray-400'}`} />
+          <span className={`text-sm font-medium transition-colors ${trashDropOver ? 'text-red-700' : 'text-gray-500'}`}>
+            {trashDropOver ? 'Solte para excluir' : 'Arraste aqui para excluir'}
+          </span>
+        </div>
+      )}
+
+      {/* ── Trash confirmation dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!pendingTrashProduct} onOpenChange={(open) => !open && setPendingTrashProduct(null)}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Apagar produto</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja apagar <strong>{pendingTrashProduct?.name}</strong>? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <DialogClose render={
+              <Button
+                variant="destructive"
+                disabled={!!deleting}
+                onClick={() => pendingTrashProduct && deleteProduct(pendingTrashProduct.id)}
+              />
+            }>
+              {deleting ? 'Apagando...' : 'Apagar'}
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit sheet ────────────────────────────────────────────────────────── */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
