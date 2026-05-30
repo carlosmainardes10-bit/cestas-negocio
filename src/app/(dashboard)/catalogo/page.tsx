@@ -137,15 +137,19 @@ export default function CatalogoPage() {
     }
   }
 
-  function generateShareLink() {
+  async function generateShareLink() {
     const selected = Array.from(selectedForShare)
     if (selected.length === 0) { toast.error('Selecione ao menos uma cesta'); return }
     const base = `${window.location.origin}/p/${userId}`
     const url = selected.length === items.length
       ? base
       : `${base}?ids=${selected.join(',')}`
-    navigator.clipboard.writeText(url)
-    toast.success('Link copiado! Compartilhe com seus clientes.')
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('Link copiado! Compartilhe com seus clientes.')
+    } catch {
+      toast.error('Não foi possível copiar. Copie manualmente: ' + url)
+    }
     setShareSelectorOpen(false)
   }
 
@@ -166,19 +170,16 @@ export default function CatalogoPage() {
     type ItemRow = { quantity: number; products: { name: string } | null }
     const basketItems = (rawItems ?? []) as ItemRow[]
 
-    let message = `🧺 ${item.name}\n`
+    let message = `🧺 ${item.name} — ${formatCurrency(item.price)}\n`
     if (item.priceFor2) {
-      message += `1 pessoa: ${formatCurrency(item.price)}\n`
-      message += `2 pessoas: ${formatCurrency(item.priceFor2)}\n`
-    } else {
-      message += `${formatCurrency(item.price)}\n`
+      message += `Para 2 pessoas: ${formatCurrency(item.priceFor2)}\n`
     }
 
     const productLines = basketItems
       .filter(bi => bi.products)
       .map(bi => includeQuantities && bi.quantity > 1
-        ? `- ${bi.quantity}x ${bi.products!.name}`
-        : `- ${bi.products!.name}`
+        ? `• ${bi.quantity}x ${bi.products!.name}`
+        : `• ${bi.products!.name}`
       )
 
     if (productLines.length > 0) {
