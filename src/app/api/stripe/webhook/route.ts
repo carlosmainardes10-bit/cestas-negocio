@@ -25,14 +25,34 @@ export async function POST(req: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session
       if (session.mode !== 'subscription') break
 
-      const userId = session.metadata?.supabase_user_id
-      const plan = session.metadata?.plan
-      if (!userId || !plan) break
+      const customerId = session.customer as string
+      const subscriptionId = session.subscription as string
+      if (!customerId || !subscriptionId) break
+
+      // Lookup user by stripe_customer_id first, fall back to metadata
+      const { data: byCustomer } = await supabase
+        .from('users')
+        .select('id')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle()
+      const userId = byCustomer?.id ?? session.metadata?.supabase_user_id
+      if (!userId) break
+
+      // Determine plan from subscription price_id, fall back to metadata
+      let plan: 'basic' | 'premium' | null = null
+      try {
+        const sub = await stripe.subscriptions.retrieve(subscriptionId)
+        const priceId = sub.items.data[0]?.price.id
+        if (priceId === process.env.STRIPE_BASIC_PRICE_ID) plan = 'basic'
+        else if (priceId === process.env.STRIPE_PREMIUM_PRICE_ID) plan = 'premium'
+      } catch { /* ignore */ }
+      if (!plan) plan = (session.metadata?.plan as 'basic' | 'premium') ?? null
+      if (!plan) break
 
       await supabase.from('users').update({
-        plan: plan as 'basic' | 'premium',
-        stripe_customer_id: session.customer as string,
-        stripe_subscription_id: session.subscription as string,
+        plan,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscriptionId,
       }).eq('id', userId)
 
       const promotionCodeId = session.metadata?.promotion_code_id
