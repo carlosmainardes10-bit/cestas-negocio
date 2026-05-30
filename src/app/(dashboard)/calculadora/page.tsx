@@ -145,9 +145,10 @@ export default function CalculadoraPage() {
     if (basketError || !basket) { toast.error('Erro ao salvar cesta'); setSaving(false); return }
 
     if (result.items.length > 0) {
-      await supabase.from('basket_items').insert(
+      const { error: itemsError } = await supabase.from('basket_items').insert(
         result.items.map(item => ({ basket_id: basket.id, product_id: item.product.id, quantity: item.quantity }))
       )
+      if (itemsError) console.error('basket_items insert error:', itemsError)
     }
 
     const parsedPriceFor2 = priceFor2 ? parseFloat(priceFor2) : null
