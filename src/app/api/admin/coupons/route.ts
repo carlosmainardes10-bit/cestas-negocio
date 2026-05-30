@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stripePromoCode = await promoRes.json() as any
+    console.log('[promotionCodes fetch]', promoRes.status, JSON.stringify(stripePromoCode))
     if (!promoRes.ok) {
       throw new Error(stripePromoCode.error?.message ?? 'Erro ao criar promotion code no Stripe')
     }
@@ -93,7 +94,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ coupon })
   } catch (error) {
-    console.error('[admin/coupons POST] Stripe error:', JSON.stringify(error, null, 2))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    console.error('[admin/coupons POST] Stripe error:', error instanceof Error ? error.message : (error as any)?.raw?.message ?? (error as any)?.message ?? String(error))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const msg = (error as any)?.raw?.message ?? (error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: msg }, { status: 500 })
