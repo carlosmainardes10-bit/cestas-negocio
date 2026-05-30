@@ -7,7 +7,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Copy, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Tag } from 'lucide-react'
+import { Copy, Plus, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Tag, Trash2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 
 interface CouponUsage {
   user_email: string
@@ -33,6 +36,8 @@ export default function CouponsSection() {
   const [showForm, setShowForm] = useState(false)
   const [creating, setCreating] = useState(false)
   const [expandedCoupon, setExpandedCoupon] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Coupon | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const [code, setCode] = useState('')
   const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent')
@@ -115,6 +120,20 @@ export default function CouponsSection() {
     } else {
       toast.error('Erro ao atualizar cupom')
     }
+  }
+
+  async function deleteCoupon(coupon: Coupon) {
+    setDeleting(true)
+    const res = await fetch(`/api/admin/coupons/${coupon.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setCoupons(prev => prev.filter(c => c.id !== coupon.id))
+      toast.success('Cupom deletado')
+    } else {
+      const err = await res.json()
+      toast.error(err.error ?? 'Erro ao deletar cupom')
+    }
+    setDeleting(false)
+    setConfirmDelete(null)
   }
 
   function copyCode(c: string) {
@@ -267,6 +286,13 @@ export default function CouponsSection() {
                             : <ToggleLeft className="h-3.5 w-3.5 text-muted-foreground" />
                           }
                         </button>
+                        <button
+                          onClick={() => setConfirmDelete(coupon)}
+                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                          title="Deletar cupom"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -294,6 +320,30 @@ export default function CouponsSection() {
           </table>
         </div>
       )}
+
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Deletar cupom</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja deletar o cupom <strong>{confirmDelete?.code}</strong>?
+              O código será desativado no Stripe e removido permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => confirmDelete && deleteCoupon(confirmDelete)}
+            >
+              {deleting ? 'Deletando...' : 'Deletar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
