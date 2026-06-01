@@ -8,6 +8,8 @@ export const PRICE_IDS = {
   premium: process.env.STRIPE_PREMIUM_PRICE_ID!,
 }
 
+console.log('[stripe init] key prefix:', process.env.STRIPE_SECRET_KEY?.substring(0, 12))
+
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-04-22.dahlia',
 })
