@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { TrendingUp, TrendingDown, Plus, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Plus, ChevronLeft, ChevronRight, Trash2, Percent } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -131,6 +131,7 @@ export default function FinanceiroPage() {
   const totalIn = transactions.filter(t => t.type === 'in').reduce((s, t) => s + t.amount, 0)
   const totalOut = transactions.filter(t => t.type === 'out').reduce((s, t) => s + t.amount, 0)
   const profit = totalIn - totalOut
+  const rentabilidade = totalIn > 0 ? (profit / totalIn) * 100 : 0
   const isCurrentMonth = viewDate.year === now.getFullYear() && viewDate.month === now.getMonth() + 1
 
   return (
@@ -194,7 +195,7 @@ export default function FinanceiroPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 text-green-700 mb-1">
@@ -226,6 +227,19 @@ export default function FinanceiroPage() {
             {loading ? <Skeleton className="h-8 w-28" /> : (
               <p className={`text-2xl font-bold ${profit >= 0 ? 'text-amber-700' : 'text-red-700'}`}>
                 {formatCurrency(profit)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="border-violet-200 bg-violet-50">
+          <CardContent className="pt-5">
+            <div className="flex items-center gap-2 text-violet-700 mb-1">
+              <Percent className="h-4 w-4" />
+              <span className="text-sm font-medium">Rentabilidade</span>
+            </div>
+            {loading ? <Skeleton className="h-8 w-28" /> : (
+              <p className={`text-2xl font-bold ${rentabilidade >= 0 ? 'text-violet-700' : 'text-red-700'}`}>
+                {rentabilidade.toFixed(1).replace('.', ',')}%
               </p>
             )}
           </CardContent>

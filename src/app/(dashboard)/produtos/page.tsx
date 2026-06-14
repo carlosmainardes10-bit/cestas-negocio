@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -31,7 +31,6 @@ const PRODUCT_CATEGORIES: { value: string; label: string }[] = [
   { value: 'bebidas_alcoolicas', label: 'Bebidas Alcoólicas' },
   { value: 'mercearia', label: 'Mercearia' },
   { value: 'embalagem', label: 'Embalagem' },
-  { value: 'outros', label: 'Outros' },
 ]
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -63,6 +62,16 @@ function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function toSlug(str: string) {
+  return str
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
 export default function ProdutosPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -76,12 +85,21 @@ export default function ProdutosPage() {
   const [trashDropOver, setTrashDropOver] = useState(false)
   const [pendingTrashProduct, setPendingTrashProduct] = useState<Product | null>(null)
 
+  const [userCategories, setUserCategories] = useState<{ value: string; label: string }[]>([])
+  const [newCatMode, setNewCatMode] = useState(false)
+  const [newCatInput, setNewCatInput] = useState('')
+  const [newCatError, setNewCatError] = useState('')
+  const [savingCat, setSavingCat] = useState(false)
+
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', cost: 0, unit: 'un', category: '', brand: '', store: '' },
   })
 
-  useEffect(() => { loadProducts() }, [])
+  useEffect(() => {
+    loadProducts()
+    loadUserCategories()
+  }, [])
 
   async function loadProducts() {
     const supabase = createClient()
@@ -94,11 +112,87 @@ export default function ProdutosPage() {
     setLoading(false)
   }
 
+  async function loadUserCategories() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('product_categories')
+      .select('name, slug')
+      .eq('user_id', user.id)
+      .order('name')
+    if (data) {
+      setUserCategories(data.map(c => ({ value: c.slug, label: c.name })))
+    }
+  }
+
+  async function handleNewCategory() {
+    const name = newCatInput.trim()
+    if (!name) return
+    const slug = toSlug(name)
+
+    const allSlugs = new Set([
+      ...PRODUCT_CATEGORIES.map(c => c.value),
+      ...userCategories.map(c => c.value),
+    ])
+    if (allSlugs.has(slug)) {
+      setNewCatError('Essa categoria já existe')
+      return
+    }
+
+    setSavingCat(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSavingCat(false); return }
+
+    const { error } = await supabase
+      .from('product_categories')
+      .insert({ user_id: user.id, name, slug })
+
+    if (error) {
+      setNewCatError('Erro ao salvar categoria')
+      setSavingCat(false)
+      return
+    }
+
+    const newCat = { value: slug, label: name }
+    setUserCategories(prev => [...prev, newCat].sort((a, b) => a.label.localeCompare(b.label)))
+    setCategory(slug)
+    setValue('category', slug)
+    setNewCatInput('')
+    setNewCatError('')
+    setNewCatMode(false)
+    setSavingCat(false)
+  }
+
+  function resetNewCatMode() {
+    setNewCatMode(false)
+    setNewCatInput('')
+    setNewCatError('')
+  }
+
+  // Categorias do dropdown: estáticas + criadas pelo usuário + backward compat ao editar
+  const dropdownCategories = useMemo(() => {
+    const base = [...PRODUCT_CATEGORIES, ...userCategories]
+    if (editing && !base.find(c => c.value === editing.category)) {
+      base.push({ value: editing.category, label: editing.category })
+    }
+    return base
+  }, [userCategories, editing])
+
+  // Categorias para agrupamento da lista (inclui 'outros' para dados existentes)
+  const allDisplayCategories = useMemo(() => [
+    ...PRODUCT_CATEGORIES,
+    { value: 'outros', label: 'Outros' },
+    ...userCategories,
+  ], [userCategories])
+
   function openAdd() {
     setEditing(null)
     setCategory('')
     setUnit('un')
     reset({ name: '', cost: 0, unit: 'un', category: '', brand: '', store: '' })
+    resetNewCatMode()
     setSheetOpen(true)
   }
 
@@ -116,6 +210,7 @@ export default function ProdutosPage() {
     })
     setValue('category', product.category)
     setValue('unit', product.unit)
+    resetNewCatMode()
     setSheetOpen(true)
   }
 
@@ -180,13 +275,13 @@ export default function ProdutosPage() {
     }
   }
 
-  const grouped = PRODUCT_CATEGORIES.map(cat => ({
+  const grouped = allDisplayCategories.map(cat => ({
     ...cat,
     items: products.filter(p => p.category === cat.value),
   })).filter(g => g.items.length > 0)
 
   const uncategorized = products.filter(
-    p => !PRODUCT_CATEGORIES.find(c => c.value === p.category)
+    p => !allDisplayCategories.find(c => c.value === p.category)
   )
 
   if (loading) return <p className="text-muted-foreground text-sm p-8">Carregando...</p>
@@ -345,8 +440,8 @@ export default function ProdutosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit sheet ────────────────────────────────────────────────────────── */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      {/* ── Edit / Add sheet ──────────────────────────────────────────────────── */}
+      <Sheet open={sheetOpen} onOpenChange={(open) => { setSheetOpen(open); if (!open) resetNewCatMode() }}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editing ? 'Editar produto' : 'Novo produto'}</SheetTitle>
@@ -382,17 +477,65 @@ export default function ProdutosPage() {
 
             <div className="space-y-1">
               <Label>Categoria *</Label>
-              <Select value={category} onValueChange={(v) => { if (v) { setCategory(v); setValue('category', v) } }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione a categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRODUCT_CATEGORIES.map(c => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.category && !category && <p className="text-sm text-red-500">Categoria obrigatória</p>}
+              {newCatMode ? (
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nome da nova categoria"
+                      value={newCatInput}
+                      onChange={(e) => { setNewCatInput(e.target.value); setNewCatError('') }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleNewCategory() } }}
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleNewCategory}
+                      disabled={savingCat || !newCatInput.trim()}
+                    >
+                      {savingCat ? '...' : 'OK'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={resetNewCatMode}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                  {newCatError && <p className="text-sm text-destructive">{newCatError}</p>}
+                </div>
+              ) : (
+                <Select
+                  value={category}
+                  onValueChange={(v) => {
+                    if (!v) return
+                    if (v === '__new_category') {
+                      setNewCatMode(true)
+                      setNewCatError('')
+                    } else {
+                      setCategory(v)
+                      setValue('category', v)
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione a categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dropdownCategories.map(c => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                    <SelectItem value="__new_category" className="text-primary font-medium">
+                      + Cadastrar nova categoria
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              {errors.category && !category && !newCatMode && (
+                <p className="text-sm text-red-500">Categoria obrigatória</p>
+              )}
             </div>
 
             <Separator />

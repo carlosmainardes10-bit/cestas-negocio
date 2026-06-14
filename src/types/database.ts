@@ -39,6 +39,35 @@ export interface Database {
         }
         Relationships: []
       }
+      product_categories: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          slug: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          slug: string
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'product_categories_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          }
+        ]
+      }
       products: {
         Row: {
           id: string
