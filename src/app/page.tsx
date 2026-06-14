@@ -230,16 +230,16 @@ export default async function LandingPage() {
             <div className="rounded-2xl overflow-hidden aspect-[4/3] shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="https://fbovqqyzghzmpgkctpyb.supabase.co/storage/v1/object/public/training/Especial%20rosa.jpeg"
-                alt="Cesta especial rosa"
+                src="https://static.wixstatic.com/media/c8053b_41c8c8f2a7eb4ea588c24f47e817af81~mv2.jpeg"
+                alt="Cesta Especial Wine and Goods"
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="rounded-2xl overflow-hidden aspect-[4/3] shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="https://fbovqqyzghzmpgkctpyb.supabase.co/storage/v1/object/public/training/Especial%20vermelha.jpeg"
-                alt="Cesta especial vermelha"
+                src="https://static.wixstatic.com/media/c8053b_543c57ce9f1e4dd2a18e6a694804fe62~mv2.jpeg"
+                alt="Cesta Especial Wine and Goods"
                 className="w-full h-full object-cover"
               />
             </div>

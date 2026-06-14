@@ -82,8 +82,8 @@ export function Sidebar() {
             className={cn(
               'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
               pathname === href
-                ? 'bg-amber-50 text-amber-900'
-                : 'text-muted-foreground hover:bg-gray-50 hover:text-foreground'
+                ? 'bg-brand-rose-light/40 text-brand-rose-dark'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
             <Icon className="h-4 w-4" />
@@ -96,8 +96,8 @@ export function Sidebar() {
             className={cn(
               'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
               pathname === '/admin'
-                ? 'bg-amber-50 text-amber-900'
-                : 'text-muted-foreground hover:bg-gray-50 hover:text-foreground'
+                ? 'bg-brand-rose-light/40 text-brand-rose-dark'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
           >
             <ShieldCheck className="h-4 w-4" />
@@ -122,11 +122,11 @@ export function Sidebar() {
     <>
       {/* ── Mobile hamburger button ── */}
       <button
-        className="md:hidden fixed top-3 left-3 z-50 bg-white border rounded-lg p-2 shadow-sm"
+        className="md:hidden fixed top-3 left-3 z-50 bg-background border border-border rounded-lg p-2 shadow-sm"
         onClick={() => setOpen(true)}
         aria-label="Abrir menu"
       >
-        <Menu className="h-5 w-5 text-gray-700" />
+        <Menu className="h-5 w-5 text-foreground" />
       </button>
 
       {/* ── Mobile backdrop ── */}
@@ -140,7 +140,7 @@ export function Sidebar() {
       {/* ── Sidebar panel ── */}
       <aside
         className={cn(
-          'bg-white border-r flex flex-col py-6 px-3 shrink-0 z-50 transition-transform duration-200',
+          'bg-sidebar border-r border-sidebar-border flex flex-col py-6 px-3 shrink-0 z-50 transition-transform duration-200',
           // Mobile: fixed overlay
           'fixed inset-y-0 left-0 w-64 md:relative md:w-56 md:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
@@ -156,10 +156,10 @@ export function Sidebar() {
         </button>
 
         <div className="px-3 mb-8 flex items-center gap-2">
-          <BasketIcon size={28} color="#92400e" />
+          <BasketIcon size={28} color="#C4748A" />
           <div>
-            <p className="text-xs font-bold text-amber-900 leading-none">EMPRESA DE</p>
-            <p className="text-base font-black text-amber-900 leading-none tracking-tight">CESTAS</p>
+            <p className="text-xs font-bold leading-none text-brand-gold">EMPRESA DE</p>
+            <p className="text-base font-black leading-none tracking-tight text-brand-rose">CESTAS</p>
           </div>
         </div>
 
