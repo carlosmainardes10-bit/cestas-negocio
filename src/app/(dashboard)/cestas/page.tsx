@@ -65,6 +65,7 @@ export default function CestasPage() {
   const [saving, setSaving] = useState(false)
   const [usageCount, setUsageCount] = useState<number | null>(null)
   const [usageLimit] = useState(3)
+  const [userCategories, setUserCategories] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const supabase = createClient()
@@ -76,6 +77,18 @@ export default function CestasPage() {
     supabase.from('ai_usage').select('basket_count')
       .eq('year_month', yearMonth).maybeSingle()
       .then(({ data }) => setUsageCount(data?.basket_count ?? 0))
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('product_categories').select('name, slug').eq('user_id', user.id)
+        .then(({ data }) => {
+          if (data) {
+            const map: Record<string, string> = {}
+            data.forEach(c => { map[c.slug] = c.name })
+            setUserCategories(map)
+          }
+        })
+    })
   }, [])
 
   async function handleGenerate() {
@@ -181,7 +194,8 @@ export default function CestasPage() {
     p.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
     p.brand?.toLowerCase().includes(pickerSearch.toLowerCase())
   )
-  const groupedProducts = Object.entries(PRODUCT_CATEGORIES)
+  const allProductCategories = { ...PRODUCT_CATEGORIES, ...userCategories }
+  const groupedProducts = Object.entries(allProductCategories)
     .map(([key, label]) => ({ key, label, items: filteredProducts.filter(p => p.category === key) }))
     .filter(g => g.items.length > 0)
 

@@ -79,6 +79,7 @@ export default function CalculadoraPage() {
   const [editBasketId, setEditBasketId] = useState<string | null>(null)
   const [editCatalogItemId, setEditCatalogItemId] = useState<string | null>(null)
   const [confirmZeroCostsOpen, setConfirmZeroCostsOpen] = useState(false)
+  const [userCategories, setUserCategories] = useState<Record<string, string>>({})
 
   const { register, handleSubmit, formState: { errors }, reset, getValues } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -86,11 +87,22 @@ export default function CalculadoraPage() {
   })
 
   useEffect(() => {
-    createClient()
-      .from('products')
-      .select('*')
-      .order('category').order('name')
+    const supabase = createClient()
+
+    supabase.from('products').select('*').order('category').order('name')
       .then(({ data }) => { if (data) setDbProducts(data as Product[]) })
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('product_categories').select('name, slug').eq('user_id', user.id)
+        .then(({ data }) => {
+          if (data) {
+            const map: Record<string, string> = {}
+            data.forEach(c => { map[c.slug] = c.name })
+            setUserCategories(map)
+          }
+        })
+    })
 
     const params = new URLSearchParams(window.location.search)
     const editId = params.get('edit')
@@ -281,7 +293,8 @@ export default function CalculadoraPage() {
     await doActualSave()
   }
 
-  const groupedProducts = Object.entries(PRODUCT_CATEGORIES)
+  const allProductCategories = { ...PRODUCT_CATEGORIES, ...userCategories }
+  const groupedProducts = Object.entries(allProductCategories)
     .map(([key, label]) => ({ key, label, items: dbProducts.filter(p => p.category === key) }))
     .filter(g => g.items.length > 0)
 
