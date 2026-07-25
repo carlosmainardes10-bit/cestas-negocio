@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Camera, Crown, Trash2, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
+import { useClickPreferences } from '@/hooks/useClickPreferences'
 
 type Profile = {
   name: string
@@ -36,6 +37,8 @@ export default function PerfilPage() {
   // avatar
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const { soundEnabled, setSoundEnabled, visualEnabled, setVisualEnabled } = useClickPreferences()
 
   useEffect(() => {
     const supabase = createClient()
@@ -274,6 +277,43 @@ export default function PerfilPage() {
           <Button onClick={handleChangePassword} disabled={savingPassword} variant="outline">
             {savingPassword ? 'Alterando...' : 'Alterar senha'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Click preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Preferências do app</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Som ao clicar</p>
+              <p className="text-xs text-muted-foreground">Toca um som suave em cada clique</p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={soundEnabled}
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${soundEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Efeito visual ao clicar</p>
+              <p className="text-xs text-muted-foreground">Mostra um ripple animado no cursor</p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={visualEnabled}
+              onClick={() => setVisualEnabled(!visualEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${visualEnabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${visualEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
         </CardContent>
       </Card>
     </div>

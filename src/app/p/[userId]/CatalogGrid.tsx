@@ -1,8 +1,6 @@
 'use client'
 
 import { BookImage } from 'lucide-react'
-import { useItemClick } from '@/hooks/useItemClick'
-import './ripple.css'
 
 interface BasketData {
   name: string
@@ -31,8 +29,6 @@ function formatCurrency(value: number) {
 }
 
 export function CatalogGrid({ items }: { items: CatalogRow[] }) {
-  const { handleClick } = useItemClick()
-
   if (items.length === 0) {
     return (
       <div className="text-center py-20 text-amber-700">
@@ -50,7 +46,6 @@ export function CatalogGrid({ items }: { items: CatalogRow[] }) {
         return (
           <div
             key={item.id}
-            onClick={handleClick}
             className="bg-white rounded-2xl overflow-hidden shadow-sm border border-amber-100 cursor-pointer relative"
           >
             <div className="h-48 bg-gradient-to-br from-amber-100 to-orange-100 overflow-hidden">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalClickEffect } from "@/components/GlobalClickEffect";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster />
+        <GlobalClickEffect />
       </body>
     </html>
   );

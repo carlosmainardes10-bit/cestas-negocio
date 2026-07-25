@@ -150,3 +150,23 @@
     @apply font-sans;
   }
 }
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(196, 116, 138, 0.35);
+  transform: scale(0);
+  animation: ripple-animation 0.6s ease-out;
+  pointer-events: none;
+  width: 60px;
+  height: 60px;
+  margin-left: -30px;
+  margin-top: -30px;
+}
+
+@keyframes ripple-animation {
+  to {
+    transform: scale(5);
+    opacity: 0;
+  }
+}
