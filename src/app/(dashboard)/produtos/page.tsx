@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -19,6 +19,20 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragStartEvent,
+  type DragOverEvent,
+  type DragEndEvent,
+  type UniqueIdentifier,
+} from '@dnd-kit/core'
 
 const PRODUCT_CATEGORIES: { value: string; label: string }[] = [
   { value: 'padaria', label: 'Padaria' },
@@ -72,6 +86,79 @@ function toSlug(str: string) {
     .replace(/^_+|_+$/g, '')
 }
 
+// ── dnd-kit sub-components ─────────────────────────────────────────────────
+
+function DraggableCard({ product, onEdit }: { product: Product; onEdit: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: product.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onClick={onEdit}
+      className={`relative group bg-white border border-gray-200 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-amber-300 hover:shadow-sm transition-all select-none${isDragging ? ' opacity-40' : ''}`}
+    >
+      <div className="text-sm font-semibold text-gray-800 truncate">{product.name}</div>
+      {product.brand && (
+        <div className="text-xs text-muted-foreground truncate mt-0.5">{product.brand}</div>
+      )}
+      <div className="text-xs text-amber-700 font-medium mt-1.5">
+        {formatCurrency(product.cost)}
+        <span className="text-muted-foreground font-normal">/{product.unit}</span>
+      </div>
+      <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Pencil className="h-3 w-3 text-muted-foreground" />
+      </div>
+    </div>
+  )
+}
+
+function DroppableCategoryZone({
+  id,
+  isOver,
+  children,
+}: {
+  id: string
+  isOver: boolean
+  children: ReactNode
+}) {
+  const { setNodeRef } = useDroppable({ id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl border-2 p-3 transition-colors ${
+        isOver ? 'border-amber-400 bg-amber-50' : 'border-transparent'
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function DroppableTrash({ isOver }: { isOver: boolean }) {
+  const { setNodeRef } = useDroppable({ id: 'trash' })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-6 py-3 rounded-2xl border-2 shadow-lg transition-all ${
+        isOver
+          ? 'border-red-500 bg-red-100 scale-110'
+          : 'border-gray-300 bg-white/90 backdrop-blur-sm'
+      }`}
+    >
+      <Trash2 className={`h-5 w-5 transition-colors ${isOver ? 'text-red-600' : 'text-gray-400'}`} />
+      <span className={`text-sm font-medium transition-colors ${isOver ? 'text-red-700' : 'text-gray-500'}`}>
+        {isOver ? 'Solte para excluir' : 'Arraste aqui para excluir'}
+      </span>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────
+
 export default function ProdutosPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,15 +168,19 @@ export default function ProdutosPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [category, setCategory] = useState('')
   const [unit, setUnit] = useState('un')
-  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
-  const [trashDropOver, setTrashDropOver] = useState(false)
   const [pendingTrashProduct, setPendingTrashProduct] = useState<Product | null>(null)
+  const [activeProduct, setActiveProduct] = useState<Product | null>(null)
+  const [overId, setOverId] = useState<UniqueIdentifier | null>(null)
 
   const [userCategories, setUserCategories] = useState<{ value: string; label: string }[]>([])
   const [newCatMode, setNewCatMode] = useState(false)
   const [newCatInput, setNewCatInput] = useState('')
   const [newCatError, setNewCatError] = useState('')
   const [savingCat, setSavingCat] = useState(false)
+
+  const mouseSensor = useSensor(MouseSensor, { activationConstraint: { distance: 10 } })
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
+  const sensors = useSensors(mouseSensor, touchSensor)
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -171,7 +262,6 @@ export default function ProdutosPage() {
     setNewCatError('')
   }
 
-  // Categorias do dropdown: estáticas + criadas pelo usuário + backward compat ao editar
   const dropdownCategories = useMemo(() => {
     const base = [...PRODUCT_CATEGORIES, ...userCategories]
     if (editing && !base.find(c => c.value === editing.category)) {
@@ -180,7 +270,6 @@ export default function ProdutosPage() {
     return base
   }, [userCategories, editing])
 
-  // Categorias para agrupamento da lista (inclui 'outros' para dados existentes)
   const allDisplayCategories = useMemo(() => [
     ...PRODUCT_CATEGORIES,
     { value: 'outros', label: 'Outros' },
@@ -275,6 +364,35 @@ export default function ProdutosPage() {
     }
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const product = products.find(p => p.id === event.active.id)
+    if (product) setActiveProduct(product)
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    setOverId(event.over?.id ?? null)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    setActiveProduct(null)
+    setOverId(null)
+
+    if (!over) return
+
+    if (over.id === 'trash') {
+      const product = products.find(p => p.id === active.id)
+      if (product) setPendingTrashProduct(product)
+    } else if (over.id !== '__other') {
+      moveProductToCategory(String(active.id), String(over.id))
+    }
+  }
+
+  function handleDragCancel() {
+    setActiveProduct(null)
+    setOverId(null)
+  }
+
   const grouped = allDisplayCategories.map(cat => ({
     ...cat,
     items: products.filter(p => p.category === cat.value),
@@ -330,90 +448,56 @@ export default function ProdutosPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {allGroups.map((group) => (
-            <div
-              key={group.value}
-              onDragOver={(e) => { e.preventDefault(); setDragOverCategory(group.value) }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverCategory(null)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragOverCategory(null)
-                const productId = e.dataTransfer.getData('productId')
-                if (productId && group.value !== '__other') moveProductToCategory(productId, group.value)
-              }}
-              className={`rounded-xl border-2 p-3 transition-colors ${
-                dragOverCategory === group.value
-                  ? 'border-amber-400 bg-amber-50'
-                  : 'border-transparent'
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">{CATEGORY_EMOJI[group.value] ?? '•'}</span>
-                <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  {group.label}
-                </span>
-                <Badge variant="outline" className="text-xs">{group.items.length}</Badge>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {group.items.map((product) => (
-                  <div
-                    key={product.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('productId', product.id)
-                      e.dataTransfer.effectAllowed = 'move'
-                    }}
-                    onDragEnd={() => { setDragOverCategory(null); setTrashDropOver(false) }}
-                    onClick={() => openEdit(product)}
-                    className="relative group bg-white border border-gray-200 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-amber-300 hover:shadow-sm transition-all select-none"
-                  >
-                    <div className="text-sm font-semibold text-gray-800 truncate">{product.name}</div>
-                    {product.brand && (
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">{product.brand}</div>
-                    )}
-                    <div className="text-xs text-amber-700 font-medium mt-1.5">
-                      {formatCurrency(product.cost)}
-                      <span className="text-muted-foreground font-normal">/{product.unit}</span>
-                    </div>
-                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Pencil className="h-3 w-3 text-muted-foreground" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Trash bin (fixed at bottom) ───────────────────────────────────────── */}
-      {products.length > 0 && (
-        <div
-          onDragOver={(e) => { e.preventDefault(); setTrashDropOver(true) }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setTrashDropOver(false)
-          }}
-          onDrop={(e) => {
-            e.preventDefault()
-            setTrashDropOver(false)
-            const productId = e.dataTransfer.getData('productId')
-            const product = products.find(p => p.id === productId)
-            if (product) setPendingTrashProduct(product)
-          }}
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-6 py-3 rounded-2xl border-2 shadow-lg transition-all ${
-            trashDropOver
-              ? 'border-red-500 bg-red-100 scale-110'
-              : 'border-gray-300 bg-white/90 backdrop-blur-sm'
-          }`}
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         >
-          <Trash2 className={`h-5 w-5 transition-colors ${trashDropOver ? 'text-red-600' : 'text-gray-400'}`} />
-          <span className={`text-sm font-medium transition-colors ${trashDropOver ? 'text-red-700' : 'text-gray-500'}`}>
-            {trashDropOver ? 'Solte para excluir' : 'Arraste aqui para excluir'}
-          </span>
-        </div>
+          <div className="space-y-6">
+            {allGroups.map((group) => (
+              <DroppableCategoryZone
+                key={group.value}
+                id={group.value}
+                isOver={overId === group.value}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">{CATEGORY_EMOJI[group.value] ?? '•'}</span>
+                  <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    {group.label}
+                  </span>
+                  <Badge variant="outline" className="text-xs">{group.items.length}</Badge>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {group.items.map((product) => (
+                    <DraggableCard
+                      key={product.id}
+                      product={product}
+                      onEdit={() => openEdit(product)}
+                    />
+                  ))}
+                </div>
+              </DroppableCategoryZone>
+            ))}
+          </div>
+
+          {/* ── Trash bin (fixed at bottom) ───────────────────────────────────────── */}
+          <DroppableTrash isOver={overId === 'trash'} />
+
+          {/* ── Drag overlay (visible under finger/cursor while dragging) ─────────── */}
+          <DragOverlay>
+            {activeProduct ? (
+              <div className="bg-white border border-amber-300 rounded-xl p-3 shadow-lg select-none opacity-90 w-40">
+                <div className="text-sm font-semibold text-gray-800 truncate">{activeProduct.name}</div>
+                <div className="text-xs text-amber-700 font-medium mt-1.5">
+                  {formatCurrency(activeProduct.cost)}
+                  <span className="text-muted-foreground font-normal">/{activeProduct.unit}</span>
+                </div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* ── Trash confirmation dialog ─────────────────────────────────────────── */}
